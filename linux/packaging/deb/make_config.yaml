@@ -1,0 +1,42 @@
+display_name: Voguesly
+package_name: voguesly
+maintainer:
+  name: Voguesly
+  email: noreply@ylink.im
+
+priority: optional
+section: net
+installed_size: 6604
+essential: false
+icon: ./assets/images/icon.png
+
+dependencies:
+  - libayatana-appindicator3-1
+  - libkeybinder-3.0-0
+  - libwebkit2gtk-4.1-0
+  # [0.9.86] TUN 授权改用 file capabilities(setcap cap_net_admin,cap_net_raw);setcap / getcap 喺呢个包。
+  - libcap2-bin
+
+# [2026-09-22] 网页授权登录:面板「在客户端登录」→ ylink://login?verify=…
+# .desktop 登记 MimeType=x-scheme-handler/ylink;(Exec=Voguesly %U 会把链接当参数传入)。
+supported_mime_type:
+  - x-scheme-handler/ylink
+
+# 装 / 卸之后刷新 mimeinfo.cache,浏览器 / xdg-open 先揾到 ylink:// 嘅处理程序
+# (有 desktop-file-utils 嘅 dpkg trigger 都会做,呢度係保险;冇装就跳过,唔影响安装)。
+postinstall_scripts:
+  - 'if command -v update-desktop-database >/dev/null 2>&1; then update-desktop-database -q /usr/share/applications || true; fi'
+postuninstall_scripts:
+  - 'if command -v update-desktop-database >/dev/null 2>&1; then update-desktop-database -q /usr/share/applications || true; fi'
+
+keywords:
+  - Voguesly
+  - ylink
+  - Proxy
+
+generic_name: Voguesly 易联
+
+categories:
+  - Network
+
+startup_notify: true

@@ -1,0 +1,340 @@
+name: build
+
+on:
+  push:
+    tags:
+      - 'v*'
+  # 手动触发(Actions 页 Run workflow):唔使每次 cut tag 就可以出 Windows/Mac Intel build。
+  workflow_dispatch:
+    inputs:
+      stable:
+        # [0.9.85] 候选包用 workflow_dispatch 出(不打正式 tag),但要和正式版同样是 APP_ENV=stable,
+        # 实测的包才能原样发布。分支名带「-」(如 release/0.9.85-rc)时原本会被当成预发布。
+        description: '按正式版(APP_ENV=stable)构建'
+        type: boolean
+        default: false
+env:
+  IS_STABLE: ${{ inputs.stable == true || !contains(github.ref, '-') }}
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.41.9
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos
+
+      - name: Run tests
+        run: flutter test --reporter expanded
+
+  build:
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write   # [2026-09-30] 上传去草稿 Release 要写权限
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: android
+            os: ubuntu-latest
+          - platform: windows
+            os: windows-latest
+            arch: amd64
+          # [0.9.84] Linux amd64(deb + AppImage + rpm,同上游 FlClash 一样用 22.04 出,glibc 较旧 → 兼容面广)。
+          # arm64 暂唔出:上游要用 Flutter master 预发布版喺 ubuntu-24.04-arm 构建,同其他平台工具链唔一致。
+          - platform: linux
+            os: ubuntu-22.04
+            arch: amd64
+          # macOS 不走 CI:
+          #  ① `macos-13` runner image 已被 GitHub 退役,job 会永久 queued,
+          #     整个 run 挂着不结束(实测 run 29772711705 卡死;上一次熬到 24 小时超时才死),
+          #     连带 Windows/Android 的产物也拿不到 release。
+          #  ② macOS 版本本来就在本地出:签名 + 公证 + staple + DMG 走 ~/yl-devid/finish-*.sh,
+          #     CI 产物没有 Developer ID 签名,对我们没有用。
+
+    steps:
+      # [2026-09-24] 0.9.89 安卓连续两次「No space left on device」(runner 连自己嘅诊断日志都写唔落)。
+      #   安卓一次过编三个 ABI + NDK + Go 核心,ubuntu-latest 剩余空间唔够 ⇒ 开编前删走用唔到嘅大件。
+      #   ⚠️ 唔好删 /usr/local/lib/android(Android SDK 喺度)。
+      - name: Free disk space (Android)
+        if: matrix.platform == 'android'
+        run: |
+          df -h / | tail -1
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/local/share/boost /opt/hostedtoolcache/CodeQL /usr/local/share/powershell /usr/share/swift || true
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+          df -h / | tail -1
+      - name: Setup rust
+        if: startsWith(matrix.os, 'windows-11-arm')
+        run: |
+          Invoke-WebRequest -Uri "https://win.rustup.rs/aarch64" -OutFile rustup-init.exe
+          .\rustup-init.exe -y --default-toolchain stable
+          $cargoPath = "$env:USERPROFILE\.cargo\bin"
+          Add-Content $env:GITHUB_PATH $cargoPath
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Android Signing
+        if: startsWith(matrix.platform,'android')
+        run: |
+          echo "${{ secrets.KEYSTORE }}" | base64 --decode > android/app/keystore.jks
+          echo "${{ secrets.SERVICE_JSON }}" | base64 --decode > android/app/google-services.json
+          echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> android/local.properties
+          echo "storePassword=${{ secrets.STORE_PASSWORD }}" >> android/local.properties
+          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> android/local.properties
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.0'
+          cache-dependency-path: |
+            core/go.sum
+
+      - name: Enable git long paths (Windows)
+        if: startsWith(matrix.os, 'windows')
+        run: git config --global core.longpaths true
+
+      - name: Setup Flutter
+        if: ${{ !(startsWith(matrix.os, 'windows-11-arm') || startsWith(matrix.os, 'ubuntu-24.04-arm')) }}
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.41.9
+          cache: true
+      - name: Setup Flutter With Other
+        if: startsWith(matrix.os, 'windows-11-arm') || startsWith(matrix.os, 'ubuntu-24.04-arm')
+        uses: subosito/flutter-action@v2
+        with:
+          channel: master
+          flutter-version: 3.44.0-0.1.pre
+          cache: true
+
+      - name: Setup NDK
+        if: startsWith(matrix.platform,'android')
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r28c
+          add-to-path: true
+          link-to-sdk: true
+
+      - name: Get Flutter Dependency
+        run: |
+          flutter --version
+          flutter pub get
+
+      # 端到端:真 Windows 上挂载 webview_windows 的 Webview,导航到线上 cs.html,断言
+      # navigationCompleted = 客服页在内嵌 WebView2 里真渲染。continue-on-error 只为不因 GUI 测抖动
+      # 阻断出包;结论看日志 CS_SELFTEST=PASS。
+      - name: CS webview end-to-end render test (Windows)
+        if: matrix.platform == 'windows'
+        continue-on-error: true
+        run: flutter test integration_test/cs_webview_test.dart -d windows
+
+      - name: Setup
+        run: dart setup.dart ${{ matrix.platform }} ${{ env.IS_STABLE == 'true' && '--env stable' || '' }} -v
+
+      # 证明真实打包出的 WebView2Loader.dll 能与 WebView2 Runtime 握手 → webview_windows.initialize()
+      # 会成功 → 在线客服内嵌窗真起(非 fallback 弹浏览器)。这是「客服窗运行时可用」的功能级铁证。
+      - name: Verify WebView2 loader handshakes with runtime (Windows CS window)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem dist -Recurse -Filter *windows-amd64.zip -ErrorAction SilentlyContinue | Select-Object -First 1
+          $dll = $null
+          if ($zip) {
+            Expand-Archive -Path $zip.FullName -DestinationPath probe_app -Force
+            $dll = Get-ChildItem probe_app -Recurse -Filter WebView2Loader.dll -ErrorAction SilentlyContinue | Select-Object -First 1
+          }
+          if (-not $dll) { $dll = Get-Item "windows/WebView2Loader.dll" }
+          Write-Host "probing SHIPPING loader: $($dll.FullName) ($($dll.Length) bytes)"
+          $env:PATH = "$(Split-Path $dll.FullName);$env:PATH"
+          Add-Type @"
+          using System;
+          using System.Runtime.InteropServices;
+          public static class WV2 {
+            [DllImport("WebView2Loader.dll", CharSet=CharSet.Unicode)]
+            public static extern int GetAvailableCoreWebView2BrowserVersionString(string browserExecutableFolder, out IntPtr versionInfo);
+          }
+          "@
+          $v=[IntPtr]::Zero
+          $hr=[WV2]::GetAvailableCoreWebView2BrowserVersionString($null,[ref]$v)
+          $s = if($v -ne [IntPtr]::Zero){[Runtime.InteropServices.Marshal]::PtrToStringUni($v)}else{"<null>"}
+          Write-Host "GetAvailableCoreWebView2BrowserVersionString => HR=$hr  RuntimeVersion=$s"
+          if ($hr -eq 0 -and $s -ne "<null>") {
+            Write-Host "PROOF-OK: shipping WebView2Loader.dll loaded AND detected WebView2 Runtime $s -> webview_windows initialize() succeeds -> 在线客服 embeds (no browser fallback)."
+          } else {
+            Write-Error "loader could NOT detect runtime (HR=$hr) -> CS window would fall back"; exit 1
+          }
+
+      # [0.9.85] B-P0-WIN-VCRUNTIME-0922:全新 Win10 没有 VC++ 运行库,以前的包打开即报缺 DLL。
+      # 运行库由 windows/CMakeLists.txt 在 install 步骤带进构建输出;这里对最终的便携 zip 做闸:
+      #   ① 3 个 DLL 必须在包里(打印版本号备查);
+      #   ② 用 dumpbin 扫包内全部 exe / dll 的依赖,凡是引用到的 MSVC 运行库(msvcp / vcruntime / concrt / vccorlib)都必须在包里
+      #      —— 以后工具集升级多依赖一个 DLL 时,这里会先红,而不是等用户报「打不开」。
+      # setup.exe 与 zip 来自同一个构建目录(inno [Files] Source = 同一份),安装版另在测试机上装一次验证。
+      - name: Verify VC++ runtime DLLs are bundled (Windows)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem dist -Recurse -Filter *windows-amd64.zip -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $zip) { Write-Error "portable zip not found under dist/"; exit 1 }
+          $dir = "vc_probe"
+          if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }
+          Expand-Archive -Path $zip.FullName -DestinationPath $dir -Force
+          $missing = @()
+          foreach ($n in @('vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll')) {
+            $f = Get-ChildItem $dir -Recurse -Filter $n | Select-Object -First 1
+            if (-not $f) { $missing += $n } else { Write-Host ("{0}  FileVersion={1}  {2} bytes" -f $n, $f.VersionInfo.FileVersion, $f.Length) }
+          }
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          $dumpbin = Get-ChildItem "$vs\VC\Tools\MSVC" -Recurse -Filter dumpbin.exe -ErrorAction SilentlyContinue | Where-Object { $_.FullName -match 'Hostx64\\x64' } | Select-Object -First 1
+          if ($dumpbin) {
+            $present = @((Get-ChildItem $dir -Recurse -Filter *.dll).Name | ForEach-Object { $_.ToLower() })
+            $checked = 0
+            foreach ($bin in Get-ChildItem $dir -Recurse -Include *.exe, *.dll) {
+              $checked++
+              $deps = & $dumpbin.FullName /nologo /dependents $bin.FullName | ForEach-Object { $_.Trim() } | Where-Object { $_ -match '^(msvcp|vcruntime|concrt|vccorlib)\d.*\.dll$' }
+              foreach ($d in $deps) { if ($present -notcontains $d.ToLower()) { $missing += "$d (needed by $($bin.Name))" } }
+            }
+            Write-Host "dumpbin scanned $checked binaries"
+          } else {
+            Write-Warning "dumpbin not found; only checked the 3 required DLLs"
+          }
+          if ($missing.Count -gt 0) {
+            $m = ($missing | Sort-Object -Unique) -join ', '
+            Write-Error "MISSING VC++ runtime in portable zip: $m"
+            exit 1
+          }
+          Write-Host "PROOF-OK: portable zip bundles the VC++ runtime; every MSVC runtime import is satisfied app-locally."
+
+      # [2026-09-30] 改传去**私有草稿 Release**:私有仓 artifact 额度得 500MB,两次发版就爆
+      #   (「Artifact storage quota has been hit」,删咗旧嘢都要等 6–12 小时先重算,之前要临时公开仓库先出到包)。
+      #   草稿 release 唔占 artifact 额度、永远唔公开;每个分支一个 tag `ci-<分支>`,重跑用 --clobber 覆盖。
+      #   本机攞包:gh release download ci-<分支> -R kisssam6886/voguesly-app -D dist/ci
+      - name: Upload
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="ci-${GITHUB_REF_NAME//\//-}"
+          gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            || gh release create "$TAG" -R "$GITHUB_REPOSITORY" --draft --title "$TAG" --notes "CI build (draft, private)" --target "$GITHUB_SHA" \
+            || gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null
+          find dist -maxdepth 1 -type f -print0 | xargs -0 gh release upload "$TAG" -R "$GITHUB_REPOSITORY" --clobber
+
+
+  upload:
+    # 禁用:此 job 是上游 FlClash 作者的 telegram + fdroid(chen08209) 发布流程,
+    # 我哋唔需要(直接下载 build job 嘅 artifact)。开住会令每次 run 显示 failure。
+    if: false
+    permissions: write-all
+    needs: [ build ]
+    runs-on: ubuntu-latest
+    services:
+      telegram-bot-api:
+        image: aiogram/telegram-bot-api:latest
+        env:
+          TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+          TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+        ports:
+          - 8081:8081
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download
+        uses: actions/download-artifact@v4
+        with:
+          path: ./dist/
+          pattern: artifact-*
+          merge-multiple: true
+
+      - name: Generate release.md
+        run: |
+          tags=($(git tag --merged HEAD --sort=-creatordate))
+          preTag=$(curl -s "https://api.github.com/repos/chen08209/FlClash/releases/latest" | \
+          sed -nE 's/.*"tag_name": "([^"]+)".*/\1/p')
+          
+          [ -z "$preTag" ] && preTag=""
+          
+          out="release.md" > "$out"
+          
+          for i in "${!tags[@]}"; do
+            curr="${tags[i]}"
+            [[ "$curr" == "$preTag" ]] && break
+          
+            prev="${tags[i+1]}"
+            range="${prev:+$prev..}$curr"
+          
+            git log --no-merges --pretty=format:"%B" "$range" | \
+            awk '!/Update changelog/ && NF {print "- " $0 "\n"}' >> "$out"
+          done
+      - name: Push to telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+          python release_telegram.py
+
+      - name: Patch release.md
+        run: |
+          version=$(echo "${{ github.ref_name }}" | sed 's/^v//')
+          sed "s|VERSION|$version|g" ./.github/release_template.md >> release.md
+
+      - name: Generate sha256
+        if: ${{ env.IS_STABLE == 'true' }}
+        run: |
+          cd ./dist
+          sha256sum * > SHA256SUMS
+
+      - name: Release
+        if: ${{ env.IS_STABLE == 'true' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ./dist/*
+          body_path: './release.md'
+
+      - name: Create Fdroid Source Dir
+        if: ${{ env.IS_STABLE == 'true' }}
+        run: |
+          mkdir -p ./tmp
+          cp ./dist/*android-arm64-v8a* ./tmp/ || true
+          echo "Files copied successfully"
+
+      - name: Push to fdroid repo
+        if: ${{ env.IS_STABLE == 'true' }}
+        uses: cpina/github-action-push-to-another-repository@v1.7.2
+        env:
+          SSH_DEPLOY_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
+        with:
+          source-directory: ./tmp/
+          destination-github-username: chen08209
+          destination-repository-name: FlClash-fdroid-repo
+          user-name: 'github-actions[bot]'
+          user-email: 'github-actions[bot]@users.noreply.github.com'
+          target-branch: main
+          commit-message: Update from ${{ github.ref_name }}
+          target-directory: /tmp/

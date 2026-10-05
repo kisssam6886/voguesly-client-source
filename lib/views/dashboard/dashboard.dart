@@ -1,0 +1,294 @@
+import 'dart:math';
+
+import 'package:defer_pointer/defer_pointer.dart';
+import 'package:fl_clash/common/common.dart';
+import 'package:fl_clash/enum/enum.dart';
+import 'package:fl_clash/models/models.dart' show retiredDashboardWidgets;
+import 'package:fl_clash/providers/providers.dart';
+import 'package:fl_clash/state.dart';
+import 'package:fl_clash/widgets/widgets.dart';
+import 'package:fl_clash/voguesly/voguesly_noplan.dart';
+import 'package:fl_clash/voguesly/voguesly_remote_banner.dart';
+import 'package:fl_clash/voguesly/voguesly_update_banner.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+typedef _IsEditWidgetBuilder = Widget Function(bool isEdit);
+
+class DashboardView extends ConsumerStatefulWidget {
+  const DashboardView({super.key});
+
+  @override
+  ConsumerState<DashboardView> createState() => _DashboardViewState();
+}
+
+class _DashboardViewState extends ConsumerState<DashboardView> {
+  final key = GlobalKey<SuperGridState>();
+  final _isEditNotifier = ValueNotifier<bool>(false);
+  final _addedWidgetsNotifier = ValueNotifier<List<GridItem>>([]);
+
+  @override
+  void dispose() {
+    _isEditNotifier.dispose();
+    _addedWidgetsNotifier.dispose();
+    super.dispose();
+  }
+
+  Widget _buildIsEdit(_IsEditWidgetBuilder builder) {
+    return ValueListenableBuilder(
+      valueListenable: _isEditNotifier,
+      builder: (_, isEdit, _) {
+        return builder(isEdit);
+      },
+    );
+  }
+
+  // ignore: unused_element
+  Future<void> _handleConnection() async {
+    final coreStatus = ref.read(coreStatusProvider);
+    if (coreStatus == CoreStatus.connecting) {
+      return;
+    }
+    final tip = coreStatus == CoreStatus.connected
+        ? context.appLocalizations.forceRestartCoreTip
+        : context.appLocalizations.restartCoreTip;
+    final res = await globalState.showMessage(message: TextSpan(text: tip));
+    if (res != true) {
+      return;
+    }
+    globalState.container.read(coreActionProvider.notifier).restartCore();
+  }
+
+  List<Widget> _buildActions(bool isEdit) {
+    // 简洁主页:AppBar 唔放任何工程化按钮。
+    // 移除「核心状态·重启核心」按钮(消费者唔识「核心」,且同大圆圈「已连接」双状态打架;
+    // 核心异常后台自动重启即可)。固定布局,亦无「编辑/添加卡」。
+    return const [];
+  }
+
+  // ignore: unused_element
+  void _showAddWidgetsModal() {
+    showSheet(
+      builder: (_) {
+        return ValueListenableBuilder(
+          valueListenable: _addedWidgetsNotifier,
+          builder: (_, value, _) {
+            return AdaptiveSheetScaffold(
+              body: _AddDashboardWidgetModal(
+                items: value,
+                onAdd: (gridItem) {
+                  key.currentState?.handleAdd(gridItem);
+                },
+              ),
+              title: context.appLocalizations.add,
+            );
+          },
+        );
+      },
+      context: context,
+    );
+  }
+
+  Future<void> _handleUpdateIsEdit() async {
+    if (_isEditNotifier.value == true) {
+      await _handleSave();
+    }
+    _isEditNotifier.value = !_isEditNotifier.value;
+  }
+
+  Future<void> _handleSave() async {
+    final currentState = key.currentState;
+    if (currentState == null) {
+      return;
+    }
+    if (mounted && currentState.children.isNotEmpty) {
+      await currentState.isTransformCompleter;
+      final dashboardWidgets = currentState.children
+          .map((item) => DashboardWidget.getDashboardWidget(item))
+          .toList();
+      ref
+          .read(appSettingProvider.notifier)
+          .update(
+            (state) => state.copyWith(dashboardWidgets: dashboardWidgets),
+          );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dashboardState = ref.watch(dashboardStateProvider);
+    final columns = max(4 * ((dashboardState.contentWidth / 280).ceil()), 8);
+    final spacing = 14.mAp;
+    // 固定简洁主页:忽略旧 saved grid config,直接用消费者集。
+    // [2026-09-18 Sam 拍板减法] TUN / 系统代理两个工程开关唔再露喺主页
+    // (大圆圈 TUN-first 係唯一主控;两个开关喺「我的 → 进阶 → 网络设置」仍然有),
+    // 出站模式(规则/全部走代理)留低 —— 用户会用。
+    const orderedWidgets = [
+      DashboardWidget.vogueslyAccount,
+      DashboardWidget.connectButton,
+      DashboardWidget.currentRoute,
+      DashboardWidget.outboundMode,
+      DashboardWidget.trafficUsage,
+      DashboardWidget.networkSpeed,
+    ];
+    final children = [
+      ...orderedWidgets
+          .where(
+            (item) => item.platforms.contains(SupportPlatform.currentPlatform),
+          )
+          .map((item) => item.widget),
+    ];
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _addedWidgetsNotifier.value = DashboardWidget.values
+          .where(
+            (item) =>
+                !children.contains(item.widget) &&
+                !retiredDashboardWidgets.contains(item) &&
+                item.platforms.contains(SupportPlatform.currentPlatform),
+          )
+          .map((item) => item.widget)
+          .toList();
+    });
+    return _buildIsEdit(
+      (isEdit) => CommonScaffold(
+        title: context.appLocalizations.dashboard,
+        actions: _buildActions(isEdit),
+        body: Align(
+          alignment: Alignment.topCenter,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16).copyWith(bottom: 88),
+            child: isEdit
+                ? SystemBackBlock(
+                    child: CommonPopScope(
+                      child: SuperGrid(
+                        key: key,
+                        crossAxisCount: columns,
+                        crossAxisSpacing: spacing,
+                        mainAxisSpacing: spacing,
+                        children: children,
+                        onUpdate: () {
+                          _handleSave();
+                        },
+                      ),
+                      onPop: (context) {
+                        _handleUpdateIsEdit();
+                        return false;
+                      },
+                    ),
+                  )
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // [0.9.92] 服务端紧急横幅(version.json app_config.banner)
+                      const VogueslyRemoteBanner(),
+                      // [0.9.79] 有新版本时嘅非模态 banner(稍后 / 一键更新)
+                      const VogueslyUpdateBanner(),
+                      // [0.9.80] 未有套餐 / 已到期 → 常驻提示条(免费试用 / 购买套餐)
+                      const VogueslyNoPlanBanner(),
+                      Grid(
+                        crossAxisCount: columns,
+                        crossAxisSpacing: spacing,
+                        mainAxisSpacing: spacing,
+                        children: children,
+                      ),
+                    ],
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AddDashboardWidgetModal extends StatelessWidget {
+  final List<GridItem> items;
+  final Function(GridItem item) onAdd;
+
+  const _AddDashboardWidgetModal({required this.items, required this.onAdd});
+
+  @override
+  Widget build(BuildContext context) {
+    return DeferredPointerHandler(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Grid(
+          crossAxisCount: 8,
+          crossAxisSpacing: 16,
+          mainAxisSpacing: 16,
+          children: items
+              .map(
+                (item) => item.wrap(
+                  builder: (child) {
+                    return _AddedContainer(
+                      onAdd: () {
+                        onAdd(item);
+                      },
+                      child: child,
+                    );
+                  },
+                ),
+              )
+              .toList(),
+        ),
+      ),
+    );
+  }
+}
+
+class _AddedContainer extends StatefulWidget {
+  final Widget child;
+  final VoidCallback onAdd;
+
+  const _AddedContainer({required this.child, required this.onAdd});
+
+  @override
+  State<_AddedContainer> createState() => _AddedContainerState();
+}
+
+class _AddedContainerState extends State<_AddedContainer> {
+  @override
+  void initState() {
+    super.initState();
+  }
+
+  @override
+  void didUpdateWidget(_AddedContainer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.child != widget.child) {}
+  }
+
+  Future<void> _handleAdd() async {
+    widget.onAdd();
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        ActivateBox(child: widget.child),
+        Positioned(
+          top: -8,
+          right: -8,
+          child: DeferPointer(
+            child: SizedBox(
+              width: 24,
+              height: 24,
+              child: IconButton.filled(
+                iconSize: 20,
+                padding: const EdgeInsets.all(2),
+                onPressed: _handleAdd,
+                icon: const Icon(Icons.add),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}

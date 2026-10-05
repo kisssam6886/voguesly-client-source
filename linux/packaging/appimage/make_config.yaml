@@ -1,0 +1,25 @@
+display_name: Voguesly
+
+icon: ./assets/images/icon.png
+
+keywords:
+  - Voguesly
+  - ylink
+  - Proxy
+
+generic_name: Voguesly 易联
+
+categories:
+  - Network
+
+startup_notify: true
+
+# [2026-09-22] AppImage 打包咗 Ubuntu 22.04 嘅 libwebkit2gtk-4.1.so.0(desktop_webview_window 插件链接要),
+# 佢 NEEDED libjpeg.so.8,但打包器当 libjpeg.so.8 係 GTK 依赖(Ubuntu 嘅 gdk-pixbuf 用佢)唔打包 ⇒
+# Debian(用 libjpeg.so.62)启动即报 `libjpeg.so.8: cannot open shared object file`。一齐打包入 usr/lib。
+# 打包器用 `locate <pattern>` 揾档、取第一个结果:有通配符 ⇒ 要匹配全路径,只会中 …/libjpeg.so.8
+# (唔会中 libjpeg.so.8.2.2);locate 数据库由 setup.dart 打包前 updatedb 生成。
+# 注:本地 flutter_distributor(submodule)嘅 AppImage 打包器唔识 supported_mime_type,
+# AppImage 冇安装步骤亦登记唔到 ylink:// ⇒ 网页授权登录请用 deb / rpm。
+include:
+  - '*/libjpeg.so.8'

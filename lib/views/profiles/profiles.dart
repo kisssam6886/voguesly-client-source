@@ -1,0 +1,575 @@
+import 'package:fl_clash/common/common.dart';
+import 'package:fl_clash/enum/enum.dart';
+import 'package:fl_clash/models/models.dart';
+import 'package:fl_clash/providers/providers.dart';
+import 'package:fl_clash/state.dart';
+import 'package:fl_clash/views/profiles/overwrite/overwrite.dart';
+import 'package:fl_clash/voguesly/voguesly_auth.dart';
+import 'package:fl_clash/voguesly/voguesly_subscription.dart';
+import 'package:fl_clash/widgets/widgets.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import 'add.dart';
+import 'edit.dart';
+import 'preview.dart';
+
+class ProfilesView extends StatefulWidget {
+  const ProfilesView({super.key});
+
+  @override
+  State<ProfilesView> createState() => _ProfilesViewState();
+}
+
+class _ProfilesViewState extends State<ProfilesView> {
+  Function? applyConfigDebounce;
+  bool _isUpdating = false;
+
+  // final GlobalKey _targetKey = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    // WidgetsBinding.instance.addPostFrameCallback((_) {
+    //   final context = _targetKey.currentContext;
+    //   if (context == null) {
+    //     return;
+    //   }
+    //   Scrollable.ensureVisible(
+    //     context,
+    //     duration: commonDuration,
+    //     alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+    //   );
+    // });
+  }
+
+  void _handleShowAddExtendPage() {
+    showExtend(
+      globalState.navigatorKey.currentState!.context,
+      builder: (_) {
+        return AdaptiveSheetScaffold(
+          body: AddProfileView(
+            context: globalState.navigatorKey.currentState!.context,
+          ),
+          title: context.appLocalizations.addProfile,
+        );
+      },
+    );
+  }
+
+  Future<void> _updateProfiles(List<Profile> profiles) async {
+    if (_isUpdating == true) {
+      return;
+    }
+    _isUpdating = true;
+    final List<UpdatingMessage> messages = [];
+    final updateProfiles = profiles.map<Future>((profile) async {
+      if (profile.type == ProfileType.file) return;
+      try {
+        await globalState.container
+            .read(profilesActionProvider.notifier)
+            .updateProfile(profile, showLoading: true);
+      } catch (e) {
+        messages.add(
+          UpdatingMessage(label: profile.realLabel, message: e.toString()),
+        );
+      }
+    });
+    await Future.wait(updateProfiles);
+    if (messages.isNotEmpty) {
+      globalState.showAllUpdatingMessagesDialog(messages);
+    }
+    _isUpdating = false;
+  }
+
+  List<Widget> _buildActions(List<Profile> profiles) {
+    // 消费者版:只留「更新全部订阅」;移除「排序 profile」(单订阅用户无意义嘅工程功能)。
+    return profiles.isNotEmpty
+        ? [
+            IconButton(
+              tooltip: currentAppLocalizations.vgUpdateSubscription,
+              onPressed: () {
+                _updateProfiles(profiles);
+              },
+              icon: const Icon(Icons.sync),
+            ),
+          ]
+        : [];
+  }
+
+  Widget _buildFAB() {
+    return CommonFloatingActionButton(
+      onPressed: _handleShowAddExtendPage,
+      icon: const Icon(Icons.add),
+      label: context.appLocalizations.addProfile,
+    );
+  }
+
+  Future<void> _handleLogout(WidgetRef ref) async {
+    final res = await globalState.showMessage(
+      title: currentAppLocalizations.vgSignOutAccount,
+      message: TextSpan(text: currentAppLocalizations.vgSignOutAccountConfirm),
+    );
+    if (res != true) return;
+    // 清走当前账号导入的订阅(含 corelane/octolink 镜像域),避免登出后或换账号仍用旧订阅。
+    // 与 tools.dart 登出共用同一清理,杜绝匹配器漂移。
+    await clearVogueslyProfiles();
+    // 清账号状态，VogueslyGate 会自动返回登录页
+    ref.read(vogueslyAuthProvider.notifier).logout();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer(
+      builder: (_, ref, _) {
+        final appLocalizations = context.appLocalizations;
+        final isLoading = ref.watch(loadingProvider(LoadingTag.profiles));
+        final state = ref.watch(profilesStateProvider);
+        final spacing = 14.mAp;
+        // [0.9.91 Sam] 高级功能(开发者模式)开住先放返「添加订阅」,方便客服叫客户测试;一般用户照旧隐藏。
+        final devMode = ref.watch(
+          appSettingProvider.select((state) => state.developerMode),
+        );
+        return CommonScaffold(
+          isLoading: isLoading,
+          title: currentAppLocalizations.vgMySubscription,
+          // 消费者版:唔畀手动「添加配置」(订阅登录后自动导入),隐藏 FAB;高级功能开住先显示。
+          floatingActionButton: devMode ? _buildFAB() : null,
+          actions: [
+            ..._buildActions(state.profiles),
+            IconButton(
+              onPressed: () => _handleLogout(ref),
+              icon: const Icon(Icons.logout),
+              tooltip: currentAppLocalizations.vgSignOutAccount,
+            ),
+          ],
+          body: state.profiles.isEmpty
+              ? NullStatus(
+                  label: appLocalizations.nullProfileDesc,
+                  illustration: const ProfileEmptyIllustration(),
+                )
+              : Align(
+                  alignment: Alignment.topCenter,
+                  child: SingleChildScrollView(
+                    key: profilesStoreKey,
+                    padding: const EdgeInsets.only(
+                      left: 16,
+                      right: 16,
+                      top: 16,
+                      bottom: 88,
+                    ),
+                    child: Grid(
+                      mainAxisSpacing: spacing,
+                      crossAxisSpacing: spacing,
+                      crossAxisCount: state.columns,
+                      children: [
+                        for (int i = 0; i < state.profiles.length; i++)
+                          GridItem(
+                            child: ProfileItem(
+                              profile: state.profiles[i],
+                              groupValue: state.currentProfileId,
+                              onChanged: (profileId) {
+                                ref
+                                        .read(currentProfileIdProvider.notifier)
+                                        .value =
+                                    profileId;
+                              },
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+        );
+      },
+    );
+  }
+}
+
+class ProfileItem extends StatelessWidget {
+  final Profile profile;
+  final int? groupValue;
+  final void Function(int? value) onChanged;
+
+  const ProfileItem({
+    super.key,
+    required this.profile,
+    required this.groupValue,
+    required this.onChanged,
+  });
+
+  Future<void> _handleDeleteProfile(BuildContext context) async {
+    final appLocalizations = context.appLocalizations;
+    final res = await globalState.showMessage(
+      title: appLocalizations.tip,
+      message: TextSpan(
+        text: appLocalizations.deleteTip(appLocalizations.profile),
+      ),
+    );
+    if (res != true) {
+      return;
+    }
+    await globalState.container
+        .read(profilesActionProvider.notifier)
+        .deleteProfile(profile.id);
+  }
+
+  Future<void> _handlePreview(BuildContext context) async {
+    BaseNavigator.push<String>(context, PreviewProfileView(profile: profile));
+  }
+
+  Future updateProfile() async {
+    if (profile.type == ProfileType.file) return;
+    await globalState.loadingRun(() async {
+      // 用镜像 fallback 版,绕开 FlClash 直打 cp.voguesly.com 嘅 connection reset。
+      final ok = await globalState.container
+          .read(profilesActionProvider.notifier)
+          .refreshVogueslyProfile(profile, showLoading: true);
+      if (!ok) {
+        globalState.showNotifier(currentAppLocalizations.vgUpdateSubscriptionFailed);
+      }
+    }, tag: LoadingTag.profiles);
+  }
+
+  void _handleShowEditExtendPage(BuildContext context) {
+    showExtend(
+      context,
+      builder: (_) {
+        return AdaptiveSheetScaffold(
+          body: EditProfileView(profile: profile, context: context),
+          title: context.appLocalizations.edit,
+        );
+      },
+    );
+  }
+
+  List<Widget> _buildUrlProfileInfo(BuildContext context) {
+    final subscriptionInfo = profile.subscriptionInfo;
+    return [
+      const SizedBox(height: 8),
+      if (subscriptionInfo != null)
+        SubscriptionInfoView(subscriptionInfo: subscriptionInfo),
+      LastUpdateTimeText(
+        lastUpdateDate: profile.lastUpdateDate,
+        style: context.textTheme.labelMedium?.toLighter,
+      ),
+    ];
+  }
+
+  List<Widget> _buildFileProfileInfo(BuildContext context) {
+    return [
+      const SizedBox(height: 8),
+      LastUpdateTimeText(
+        lastUpdateDate: profile.lastUpdateDate,
+        style: context.textTheme.labelMedium?.toLight,
+      ),
+    ];
+  }
+
+  Future<void> _handleCopyLink(BuildContext context) async {
+    await Clipboard.setData(ClipboardData(text: profile.url));
+    if (context.mounted) {
+      context.showNotifier(context.appLocalizations.copySuccess);
+    }
+  }
+
+  Future<void> _handleExportFile(BuildContext context) async {
+    final appLocalizations = context.appLocalizations;
+    final res = await globalState.safeRun<bool>(() async {
+      final mFile = await profile.file;
+      final value = await picker.saveFile(
+        profile.realLabel,
+        mFile.readAsBytesSync(),
+      );
+      if (value == null) return false;
+      return true;
+    }, title: appLocalizations.tip);
+    if (res == true && context.mounted) {
+      context.showNotifier(appLocalizations.exportSuccess);
+    }
+  }
+
+  void _handlePushGenProfilePage(BuildContext context, int id) {
+    BaseNavigator.push(context, OverwriteView(profileId: id));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final appLocalizations = context.appLocalizations;
+    return CommonCard(
+      isSelected: profile.id == groupValue,
+      onPressed: () {
+        onChanged(profile.id);
+      },
+      child: ListItem(
+        key: Key(profile.id.toString()),
+        horizontalTitleGap: 16,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 一键更新订阅(唔使开 kebab,用得多)
+            if (profile.type == ProfileType.url)
+              Consumer(
+                builder: (_, ref, _) {
+                  final updating =
+                      ref.watch(isUpdatingProvider(profile.updatingKey));
+                  return IconButton(
+                    tooltip: appLocalizations.updateSubscription,
+                    onPressed: updating ? null : updateProfile,
+                    icon: Icon(Icons.sync, color: context.colorScheme.primary),
+                  );
+                },
+              ),
+            // 消费者版:voguesly 订阅隐藏 kebab(编辑/预览YAML/覆写/复制订阅链接/导出/删除
+            // 都係工程+危险操作,订阅系自动导入嘅);只留上面「更新订阅」sync 掣。
+            // [0.9.91 Sam] 高级功能开住就放返(编辑 = 替换订阅链接),方便测试。
+            if (!isVogueslyProfile(profile) ||
+                globalState.container.read(appSettingProvider).developerMode)
+              SizedBox(
+              height: 40,
+              width: 40,
+              child: Consumer(
+            builder: (_, ref, _) {
+              final isUpdating = ref.watch(
+                isUpdatingProvider(profile.updatingKey),
+              );
+              return FadeThroughBox(
+                child: isUpdating
+                    ? const Padding(
+                        key: ValueKey('loading'),
+                        padding: EdgeInsets.all(8),
+                        child: CircularProgressIndicator(),
+                      )
+                    : CommonPopupBox(
+                        key: const ValueKey('menu'),
+                        popup: CommonPopupMenu(
+                          items: [
+                            PopupMenuItemData(
+                              icon: Icons.edit_outlined,
+                              label: appLocalizations.edit,
+                              onPressed: () {
+                                _handleShowEditExtendPage(context);
+                              },
+                            ),
+                            PopupMenuItemData(
+                              icon: Icons.visibility_outlined,
+                              label: appLocalizations.preview,
+                              onPressed: () {
+                                _handlePreview(context);
+                              },
+                            ),
+                            if (profile.type == ProfileType.url) ...[
+                              PopupMenuItemData(
+                                icon: Icons.sync_alt_sharp,
+                                label: appLocalizations.updateSubscription,
+                                onPressed: () {
+                                  updateProfile();
+                                },
+                              ),
+                            ],
+                            PopupMenuItemData(
+                              icon: Icons.emergency_outlined,
+                              label: appLocalizations.more,
+                              subItems: [
+                                PopupMenuItemData(
+                                  icon: Icons.extension_outlined,
+                                  label: appLocalizations.override,
+                                  onPressed: () {
+                                    _handlePushGenProfilePage(
+                                      context,
+                                      profile.id,
+                                    );
+                                  },
+                                ),
+                                // PopupMenuItemData(
+                                //   icon: Icons.extension_outlined,
+                                //   label: appLocalizations.override + "1",
+                                //   onPressed: () {
+                                //     final overrideProfileView = OverrideProfileView(
+                                //       profileId: profile.id,
+                                //     );
+                                //     BaseNavigator.push(
+                                //       context,
+                                //       overrideProfileView,
+                                //     );
+                                //   },
+                                // ),
+                                if (profile.type == ProfileType.url) ...[
+                                  PopupMenuItemData(
+                                    icon: Icons.copy,
+                                    label: appLocalizations.copyLink,
+                                    onPressed: () {
+                                      _handleCopyLink(context);
+                                    },
+                                  ),
+                                ],
+                                PopupMenuItemData(
+                                  icon: Icons.file_copy_outlined,
+                                  label: appLocalizations.exportFile,
+                                  onPressed: () {
+                                    _handleExportFile(context);
+                                  },
+                                ),
+                              ],
+                            ),
+                            PopupMenuItemData(
+                              danger: true,
+                              icon: Icons.delete_outlined,
+                              label: appLocalizations.delete,
+                              onPressed: () {
+                                _handleDeleteProfile(context);
+                              },
+                            ),
+                          ],
+                        ),
+                        targetBuilder: (open) {
+                          return IconButton(
+                            onPressed: () {
+                              open();
+                            },
+                            icon: const Icon(Icons.more_vert),
+                          );
+                        },
+                      ),
+              );
+            },
+          ),
+            ),
+          ],
+        ),
+        title: Container(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                profile.realLabel,
+                style: context.textTheme.titleMedium,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ...switch (profile.type) {
+                    ProfileType.file => _buildFileProfileInfo(context),
+                    ProfileType.url => _buildUrlProfileInfo(context),
+                  },
+                ],
+              ),
+            ],
+          ),
+        ),
+        tileTitleAlignment: ListTileTitleAlignment.titleHeight,
+      ),
+    );
+  }
+}
+
+class LastUpdateTimeText extends StatelessWidget {
+  final DateTime? lastUpdateDate;
+  final TextStyle? style;
+
+  const LastUpdateTimeText({
+    super.key,
+    required this.lastUpdateDate,
+    this.style,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (lastUpdateDate == null) {
+      return Text('', style: style);
+    }
+    return TickBuilder(
+      duration: const Duration(minutes: 1),
+      builder: (context, _) {
+        return Text(
+          lastUpdateDate!.getLastUpdateTimeDesc(context),
+          style: style,
+        );
+      },
+    );
+  }
+}
+
+class ReorderableProfilesSheet extends StatefulWidget {
+  final List<Profile> profiles;
+
+  const ReorderableProfilesSheet({super.key, required this.profiles});
+
+  @override
+  State<ReorderableProfilesSheet> createState() =>
+      _ReorderableProfilesSheetState();
+}
+
+class _ReorderableProfilesSheetState extends State<ReorderableProfilesSheet> {
+  late List<Profile> profiles;
+
+  @override
+  void initState() {
+    super.initState();
+    profiles = List.from(widget.profiles);
+  }
+
+  Widget _buildItem(int index) {
+    final position = ItemPosition.get(index, profiles.length);
+    final profile = profiles[index];
+    return ItemPositionProvider(
+      key: Key(profile.id.toString()),
+      position: position,
+      child: DecorationListItem(
+        trailing: ReorderableDelayedDragStartListener(
+          index: index,
+          child: const Icon(Icons.drag_handle),
+        ),
+        title: Text(profile.realLabel),
+      ),
+    );
+  }
+
+  void _handleSave() {
+    Navigator.of(context).pop();
+    globalState.container.read(profilesProvider.notifier).reorder(profiles);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final appLocalizations = context.appLocalizations;
+    return AdaptiveSheetScaffold(
+      sheetTransparentToolBar: true,
+      actions: [IconButtonData(icon: Icons.check, onPressed: _handleSave)],
+      body: Padding(
+        padding: const EdgeInsets.only(bottom: 32),
+        child: ReorderableListView.builder(
+          buildDefaultDragHandles: false,
+          padding: const EdgeInsets.symmetric(
+            horizontal: 16,
+          ).copyWith(top: context.sheetTopPadding),
+          proxyDecorator: (child, index, animation) {
+            return commonProxyDecorator(_buildItem(index), index, animation);
+          },
+          onReorder: (oldIndex, newIndex) {
+            setState(() {
+              if (oldIndex < newIndex) {
+                newIndex -= 1;
+              }
+              final profile = profiles.removeAt(oldIndex);
+              profiles.insert(newIndex, profile);
+            });
+          },
+          itemBuilder: (_, index) {
+            return _buildItem(index);
+          },
+          itemCount: profiles.length,
+        ),
+      ),
+      title: appLocalizations.profilesSort,
+    );
+  }
+}

@@ -1,0 +1,279 @@
+import 'package:fl_clash/common/common.dart';
+import 'package:fl_clash/enum/enum.dart';
+import 'package:flutter/material.dart';
+import 'package:freezed_annotation/freezed_annotation.dart';
+
+import 'models.dart';
+
+part 'generated/config.freezed.dart';
+part 'generated/config.g.dart';
+
+const defaultBypassDomain = [
+  '*zhihu.com',
+  '*zhimg.com',
+  '*jd.com',
+  '100ime-iat-api.xfyun.cn',
+  '*360buyimg.com',
+  'localhost',
+  '*.local',
+  '127.*',
+  '10.*',
+  '172.16.*',
+  '172.17.*',
+  '172.18.*',
+  '172.19.*',
+  '172.2*',
+  '172.30.*',
+  '172.31.*',
+  '192.168.*',
+];
+
+const defaultAppSettingProps = AppSettingProps();
+const defaultVpnProps = VpnProps();
+const defaultNetworkProps = NetworkProps();
+const defaultProxiesStyleProps = ProxiesStyleProps();
+const defaultWindowProps = WindowProps();
+const defaultAccessControlProps = AccessControlProps();
+const defaultThemeProps = ThemeProps(primaryColor: defaultPrimaryColor);
+
+// 简洁消费者向主页:账号 + 大圆圈连接 + 当前线路 + 网络速度 + 模式。
+// [2026-09-18 Sam 拍板减法] 仪表盘只留普通用户要嘅 5 张卡 + 出站模式(用户会切全局)。
+// TUN / 系统代理两个工程开关收入「我的 → 进阶 → 网络设置」(network.dart 两个 switch 一直都有),
+// 大圆圈係唯一主控(TUN-first)。用户仍可喺仪表盘「编辑」自己加返呢两张卡。
+const List<DashboardWidget> defaultDashboardWidgets = [
+  DashboardWidget.vogueslyAccount,
+  DashboardWidget.connectButton,
+  DashboardWidget.currentRoute,
+  DashboardWidget.networkSpeed,
+  DashboardWidget.outboundMode,
+];
+
+/// 旧版预设带住嘅两张工程卡,读配置时静静拿走。
+/// [0.9.87] 连接方式已经喺大圆圈齿轮面板有正式入口 ⇒ 仪表盘「编辑」入面亦唔再列出呢两张
+/// (之前列出嚟、用户加咗下次读又被拿走,体验矛盾)。
+const Set<DashboardWidget> retiredDashboardWidgets = {
+  DashboardWidget.tunButton,
+  DashboardWidget.systemProxyButton,
+};
+
+List<DashboardWidget> dashboardWidgetsSafeFormJson(
+  List<dynamic>? dashboardWidgets,
+) {
+  try {
+    return dashboardWidgets
+            ?.map((e) => $enumDecode(_$DashboardWidgetEnumMap, e))
+            .where((e) => !retiredDashboardWidgets.contains(e))
+            .toList() ??
+        defaultDashboardWidgets;
+  } catch (_) {
+    return defaultDashboardWidgets;
+  }
+}
+
+@freezed
+abstract class AppSettingProps with _$AppSettingProps {
+  const factory AppSettingProps({
+    String? locale,
+    @Default(defaultDashboardWidgets)
+    @JsonKey(fromJson: dashboardWidgetsSafeFormJson)
+    List<DashboardWidget> dashboardWidgets,
+    @Default(false) bool onlyStatisticsProxy,
+    @Default(false) bool autoLaunch,
+    @Default(false) bool silentLaunch,
+    @Default(false) bool autoRun,
+    @Default(false) bool openLogs,
+    @Default(true) bool closeConnections,
+    @Default(defaultTestUrl) String testUrl,
+    @Default(true) bool isAnimateToPage,
+    @Default(true) bool autoCheckUpdate,
+    @Default(false) bool showLabel,
+    @Default(false) bool disclaimerAccepted,
+    @Default(false) bool crashlyticsTip,
+    @Default(false) bool crashlytics,
+    @Default(true) bool minimizeOnExit,
+    @Default(false) bool hidden,
+    @Default(false) bool developerMode,
+    @Default(RestoreStrategy.compatible) RestoreStrategy restoreStrategy,
+    @Default(true) bool showTrayTitle,
+  }) = _AppSettingProps;
+
+  factory AppSettingProps.fromJson(Map<String, Object?> json) =>
+      _$AppSettingPropsFromJson(json);
+
+  factory AppSettingProps.safeFromJson(Map<String, Object?>? json) {
+    try {
+      return json == null
+          ? defaultAppSettingProps
+          : AppSettingProps.fromJson(json);
+    } catch (_) {
+      return defaultAppSettingProps;
+    }
+  }
+}
+
+@freezed
+abstract class AccessControlProps with _$AccessControlProps {
+  const factory AccessControlProps({
+    @Default(false) bool enable,
+    @Default(AccessControlMode.rejectSelected) AccessControlMode mode,
+    @Default([]) List<String> acceptList,
+    @Default([]) List<String> rejectList,
+    @Default(AccessSortType.none) AccessSortType sort,
+    @Default(true) bool isFilterSystemApp,
+    @Default(true) bool isFilterNonInternetApp,
+  }) = _AccessControlProps;
+
+  factory AccessControlProps.fromJson(Map<String, Object?> json) =>
+      _$AccessControlPropsFromJson(json);
+}
+
+extension AccessControlPropsExt on AccessControlProps {
+  List<String> get currentList => switch (mode) {
+    AccessControlMode.acceptSelected => acceptList,
+    AccessControlMode.rejectSelected => rejectList,
+  };
+
+  AccessControlProps copyWithNewList(List<String> value) => switch (mode) {
+    AccessControlMode.acceptSelected => copyWith(acceptList: value),
+    AccessControlMode.rejectSelected => copyWith(rejectList: value),
+  };
+}
+
+@freezed
+abstract class WindowProps with _$WindowProps {
+  const factory WindowProps({
+    @Default(0) double width,
+    @Default(0) double height,
+    double? top,
+    double? left,
+  }) = _WindowProps;
+
+  factory WindowProps.fromJson(Map<String, Object?>? json) =>
+      json == null ? const WindowProps() : _$WindowPropsFromJson(json);
+}
+
+extension WindowPropsExt on WindowProps {
+  Size get _size => Size(width, height);
+
+  // 默认窗口加大(原 680×580 太细,主页 8 卡 + 检测结果会溢出要下拉;Sam 要求内容适配窗口)。
+  // 首次启动用默认 1040×760;之后由 window_manager 持久化用户实际尺寸。
+  // ⚠️ clamp 落地:持久化尺寸细过可用下限(900×660)就顶返上去 —— 令现有用户(如之前
+  //    持久化咗过细窗口)下次启动自动够位,唔使手动拉大(min-size 光设 windowOptions 唔够,
+  //    因为 size=持久化值优先应用)。
+  Size get size {
+    if (_size.isEmpty) return const Size(1040, 760);
+    return Size(width < 900 ? 900 : width, height < 660 ? 660 : height);
+  }
+}
+
+@freezed
+abstract class VpnProps with _$VpnProps {
+  const factory VpnProps({
+    @Default(true) bool enable,
+    @Default(true) bool systemProxy,
+    @Default(false) bool ipv6,
+    @Default(true) bool allowBypass,
+    @Default(false) bool dnsHijacking,
+    @Default(defaultAccessControlProps) AccessControlProps accessControlProps,
+  }) = _VpnProps;
+
+  factory VpnProps.fromJson(Map<String, Object?>? json) =>
+      json == null ? defaultVpnProps : _$VpnPropsFromJson(json);
+}
+
+@freezed
+abstract class NetworkProps with _$NetworkProps {
+  const factory NetworkProps({
+    // Desktop normal mode is TUN-first. Android has its own VPN/system-proxy
+    // setting and is not affected by this desktop compatibility switch.
+    @Default(false) bool systemProxy,
+    @Default(defaultBypassDomain) List<String> bypassDomain,
+    @Default(RouteMode.config) RouteMode routeMode,
+    @Default(true) bool autoSetSystemDns,
+    @Default(false) bool appendSystemDns,
+  }) = _NetworkProps;
+
+  factory NetworkProps.fromJson(Map<String, Object?>? json) =>
+      json == null ? const NetworkProps() : _$NetworkPropsFromJson(json);
+}
+
+@freezed
+abstract class ProxiesStyleProps with _$ProxiesStyleProps {
+  const factory ProxiesStyleProps({
+    @Default(ProxiesType.tab) ProxiesType type,
+    @Default(ProxiesSortType.none) ProxiesSortType sortType,
+    @Default(ProxiesLayout.standard) ProxiesLayout layout,
+    @Default(ProxiesIconStyle.standard) ProxiesIconStyle iconStyle,
+    @Default(ProxyCardType.expand) ProxyCardType cardType,
+  }) = _ProxiesStyleProps;
+
+  factory ProxiesStyleProps.fromJson(Map<String, Object?>? json) => json == null
+      ? defaultProxiesStyleProps
+      : _$ProxiesStylePropsFromJson(json);
+}
+
+@freezed
+abstract class TextScale with _$TextScale {
+  const factory TextScale({
+    @Default(false) bool enable,
+    @Default(1.0) double scale,
+  }) = _TextScale;
+
+  factory TextScale.fromJson(Map<String, Object?> json) =>
+      _$TextScaleFromJson(json);
+}
+
+@freezed
+abstract class ThemeProps with _$ThemeProps {
+  const factory ThemeProps({
+    int? primaryColor,
+    @Default(defaultPrimaryColors) List<int> primaryColors,
+    @Default(ThemeMode.dark) ThemeMode themeMode,
+    @Default(DynamicSchemeVariant.content) DynamicSchemeVariant schemeVariant,
+    @Default(false) bool pureBlack,
+    @Default(TextScale()) TextScale textScale,
+  }) = _ThemeProps;
+
+  factory ThemeProps.fromJson(Map<String, Object?> json) =>
+      _$ThemePropsFromJson(json);
+
+  factory ThemeProps.safeFromJson(Map<String, Object?>? json) {
+    if (json == null) {
+      return defaultThemeProps;
+    }
+    try {
+      return ThemeProps.fromJson(json);
+    } catch (_) {
+      return defaultThemeProps;
+    }
+  }
+}
+
+@freezed
+abstract class Config with _$Config {
+  const factory Config({
+    int? currentProfileId,
+    @Default(false) bool overrideDns,
+    @Default([]) List<HotKeyAction> hotKeyActions,
+    @JsonKey(fromJson: AppSettingProps.safeFromJson)
+    @Default(defaultAppSettingProps)
+    AppSettingProps appSettingProps,
+    DAVProps? davProps,
+    @Default(defaultNetworkProps) NetworkProps networkProps,
+    @Default(defaultVpnProps) VpnProps vpnProps,
+    @JsonKey(fromJson: ThemeProps.safeFromJson) required ThemeProps themeProps,
+    @Default(defaultProxiesStyleProps) ProxiesStyleProps proxiesStyleProps,
+    @Default(defaultWindowProps) WindowProps windowProps,
+    @Default(defaultClashConfig) PatchClashConfig patchClashConfig,
+    @Default([]) List<String> excludeSSIDs,
+  }) = _Config;
+
+  factory Config.fromJson(Map<String, Object?> json) => _$ConfigFromJson(json);
+
+  factory Config.realFromJson(Map<String, Object?>? json) {
+    if (json == null) {
+      return const Config(themeProps: defaultThemeProps);
+    }
+    return _$ConfigFromJson(json);
+  }
+}

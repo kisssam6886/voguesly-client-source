@@ -1,0 +1,36 @@
+display_name: Voguesly
+
+packager: Voguesly
+packagerEmail: noreply@ylink.im
+license: Other
+
+priority: optional
+section: x11
+installed_size: 6604
+essential: false
+icon: ./assets/images/icon.png
+
+# [2026-09-22] 网页授权登录 ylink://login?verify=…(同 deb)。Fedora 等由 desktop-file-utils 嘅
+# rpm file trigger 自动刷新 mimeinfo.cache。
+supported_mime_type:
+  - x-scheme-handler/ylink
+
+keywords:
+  - Voguesly
+  - ylink
+  - Proxy
+
+generic_name: Voguesly 易联
+
+group: Applications/Internet
+
+# [0.9.86] Fedora 实测:冇 Categories= 嘅 .desktop 会被部分桌面丢入「其他」分类。
+categories:
+  - Network
+
+# [0.9.86] TUN 授权改用 file capabilities(setcap cap_net_admin,cap_net_raw),
+# setcap / getcap 喺 libcap 入面;精简系统唔一定装咗。
+requires:
+  - libcap
+
+startup_notify: true

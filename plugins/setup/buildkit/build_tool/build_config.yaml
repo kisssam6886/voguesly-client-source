@@ -1,0 +1,9 @@
+tags: with_gvisor
+go_ldflags: "-w -s"
+core_dir: core
+core_name: FlClashCore
+lib_name: libclash
+output_dir: libclash
+helper_dir: services/helper
+helper_name: VogueslyHelperService  # [0.9.90] 必须同 lib/common/constant.dart appHelperService 一致(09-23 改名漏咗呢度 ⇒ 0.9.86–0.9.89 Windows 增强模式全部起唔到)
+dist_dir: dist

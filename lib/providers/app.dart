@@ -1,0 +1,576 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:dio/dio.dart';
+import 'package:fl_clash/common/common.dart';
+import 'package:fl_clash/core/controller.dart';
+import 'package:fl_clash/enum/enum.dart';
+import 'package:fl_clash/models/models.dart';
+import 'package:fl_clash/providers/providers.dart';
+import 'package:fl_clash/state.dart';
+import 'package:fl_clash/voguesly/voguesly_diag_report.dart';
+import 'package:flutter/services.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:wifi_ssid/wifi_ssid.dart';
+
+part 'generated/app.g.dart';
+
+/// 导出 / 复制日志时 prepend 嘅环境快照 —— 畀客服查问题:
+/// 客户端版本、系统、TUN 状态、当前订阅、各策略组选咗边个节点。
+/// 每项独立 try:攞唔到某项唔应该令整个导出失败(导出本身就係排障最后一根稻草)。
+String buildLogSnapshot() {
+  final c = globalState.container;
+  final sb = StringBuffer();
+  sb.writeln('==== 环境快照 / Snapshot ====');
+  try {
+    final pkg = globalState.packageInfo;
+    sb.writeln('版本 Version: ${pkg.version}+${pkg.buildNumber}');
+  } catch (_) {}
+  try {
+    sb.writeln('系统 OS: ${Platform.operatingSystem} ${Platform.operatingSystemVersion}');
+  } catch (_) {}
+  try {
+    sb.writeln('TUN: ${c.read(realTunEnableProvider)}');
+  } catch (_) {}
+  // [0.9.83] 客服排障最想知嘅现场:连咗未、分流模式、订阅几时更新、每组实际落到边个节点 + 最近延迟
+  try {
+    sb.writeln('已连接 Connected: ${c.read(isStartProvider)}');
+  } catch (_) {}
+  try {
+    sb.writeln('分流模式 Mode: ${c.read(patchClashConfigProvider).mode.name}');
+  } catch (_) {}
+  try {
+    final p = c.read(currentProfileProvider);
+    final name = (p?.label.isNotEmpty ?? false) ? p!.label : (p?.id ?? '-');
+    // [0.9.89] 加来源域名(只域名,唔含 token 路径)—— 分得出用紧边个镜像。
+    final host = Uri.tryParse(p?.url ?? '')?.host ?? '';
+    sb.writeln('订阅 Profile: $name · 来源 ${host.isEmpty ? '-' : host} · 上次更新 ${p?.lastUpdateDate?.toLocal().toString().substring(0, 16) ?? '-'}');
+  } catch (_) {}
+  try {
+    final sel = c.read(selectedMapProvider);
+    final delays = c.read(delayDataSourceProvider);
+    if (sel.isNotEmpty) {
+      sb.writeln('节点选择 Selected(组 -> 选择 => 实际节点 · 最近延迟):');
+      sel.forEach((g, n) {
+        var leaf = n;
+        try {
+          final real = c.read(realSelectedProxyStateProvider(g)).proxyName;
+          if (real.isNotEmpty) leaf = real;
+        } catch (_) {}
+        int? d;
+        for (final m in delays.values) {
+          if (m[leaf] != null) {
+            d = m[leaf];
+            break;
+          }
+        }
+        final ds = d == null ? '未测' : (d < 0 ? '超时' : '${d}ms');
+        sb.writeln(leaf == n ? '  $g -> $n · $ds' : '  $g -> $n => $leaf · $ds');
+      });
+    }
+  } catch (_) {}
+  sb.writeln('=============================');
+  return sb.toString();
+}
+
+@riverpod
+class RealTunEnable extends _$RealTunEnable with AutoDisposeNotifierMixin {
+  @override
+  bool build() {
+    return false;
+  }
+}
+
+@Riverpod(keepAlive: true)
+class Logs extends _$Logs with AutoDisposeNotifierMixin {
+  @override
+  FixedList<Log> build() {
+    return FixedList(0);
+  }
+
+  void add(Log value) {
+    // [0.9.89] warning / error 另存一份(独立缓冲 + 写磁盘):info 连接行会喺几分钟内挤走佢哋,App 重启亦会清空。
+    //   内核测速噪音喺 CoreManager.onLog 已经唔会入到呢度。
+    if (value.logLevel == LogLevel.warning || value.logLevel == LogLevel.error) {
+      VogueslyIssueLog.instance.add(value);
+    }
+    if (!ref.mounted) {
+      return;
+    }
+    this.value = state.copyWith()..add(value);
+  }
+
+  /// 导出日志。
+  /// ⚠️ 2026-08-29:macOS 上用户报「操作失败,请稍后重试」——
+  /// safeRun 会 catch 住 exception 只弹通用文案,用户永远攞唔到日志,
+  /// 而工单排障就係靠呢份日志。所以储存面板一失败就直接写去下载目录,
+  /// 唔好静静 throw。返回实际保存路径(null = 真係失败)。
+  Future<String?> exportLogs() async {
+    // [0.9.89] 导出都要去凭证(用户常把导出 / 复制嘅日志贴去在线客服,之前只有「上传」先去)。
+    final logString = redactSecrets('${buildLogSnapshot()}\n${await encodeLogsTask(value.list)}');
+    final tempFilePath = await appPath.tempFilePath;
+    final file = File(tempFilePath);
+    await file.safeWriteAsString(logString);
+
+    try {
+      final saved = await picker.saveFileWithPath(utils.logFile, tempFilePath);
+      if (saved != null) return saved;
+    } catch (_) {
+      // 储存面板开唔到 / 被拒 → 落下面 fallback
+    }
+
+    // fallback:直接写落下载目录。用 logString 唔用 temp 文件,
+    // 因为 saveFileWithPath 无论成败都会 safeDelete 咗个 temp。
+    try {
+      final dir = await appPath.downloadDirPath;
+      final target = '$dir/${utils.logFile}';
+      await File(target).writeAsString(logString);
+      return target;
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
+@Riverpod(keepAlive: true)
+class Requests extends _$Requests with AutoDisposeNotifierMixin {
+  @override
+  FixedList<TrackerInfo> build() {
+    return FixedList(0);
+  }
+
+  void addRequest(TrackerInfo value) {
+    this.value = state.copyWith()..add(value);
+  }
+}
+
+@Riverpod(keepAlive: true)
+class Providers extends _$Providers with AutoDisposeNotifierMixin {
+  @override
+  List<ExternalProvider> build() {
+    return [];
+  }
+
+  void setProvider(ExternalProvider? provider) {
+    if (provider == null) return;
+    final index = value.indexWhere((item) => item.name == provider.name);
+    if (index == -1) return;
+    final newState = List<ExternalProvider>.from(value)..[index] = provider;
+    value = newState;
+  }
+
+  Future<void> syncProviders() async {
+    value = await coreController.getExternalProviders();
+  }
+}
+
+@Riverpod(keepAlive: true)
+class Packages extends _$Packages with AutoDisposeNotifierMixin {
+  @override
+  List<Package> build() {
+    return [];
+  }
+}
+
+@Riverpod(keepAlive: true)
+class SystemBrightness extends _$SystemBrightness
+    with AutoDisposeNotifierMixin {
+  @override
+  Brightness build() {
+    return Brightness.dark;
+  }
+}
+
+@Riverpod(keepAlive: true)
+class Traffics extends _$Traffics with AutoDisposeNotifierMixin {
+  @override
+  FixedList<Traffic> build() {
+    return FixedList(0);
+  }
+
+  void addTraffic(Traffic value) {
+    this.value = state.copyWith()..add(value);
+  }
+
+  void clear() {
+    value = state.copyWith()..clear();
+  }
+}
+
+@Riverpod(keepAlive: true)
+class TotalTraffic extends _$TotalTraffic with AutoDisposeNotifierMixin {
+  @override
+  Traffic build() {
+    return const Traffic();
+  }
+}
+
+@Riverpod(keepAlive: true)
+class LocalIp extends _$LocalIp with AutoDisposeNotifierMixin {
+  @override
+  String? build() {
+    return null;
+  }
+}
+
+@Riverpod(keepAlive: true)
+class RunTime extends _$RunTime with AutoDisposeNotifierMixin {
+  @override
+  int? build() {
+    return null;
+  }
+}
+
+@Riverpod(keepAlive: true)
+class ViewSize extends _$ViewSize with AutoDisposeNotifierMixin {
+  @override
+  Size build() {
+    return Size.zero;
+  }
+}
+
+@Riverpod(keepAlive: true)
+class SideWidth extends _$SideWidth with AutoDisposeNotifierMixin {
+  @override
+  double build() {
+    return 0;
+  }
+}
+
+@Riverpod(keepAlive: true)
+double viewWidth(Ref ref) {
+  return ref.watch(viewSizeProvider).width;
+}
+
+@Riverpod(keepAlive: true)
+ViewMode viewMode(Ref ref) {
+  return utils.getViewMode(ref.watch(viewWidthProvider));
+}
+
+@Riverpod(keepAlive: true)
+bool isMobileView(Ref ref) {
+  return ref.watch(viewModeProvider) == ViewMode.mobile;
+}
+
+@Riverpod(keepAlive: true)
+double viewHeight(Ref ref) {
+  return ref.watch(viewSizeProvider).height;
+}
+
+@Riverpod(keepAlive: true)
+class Init extends _$Init with AutoDisposeNotifierMixin {
+  @override
+  bool build() {
+    return false;
+  }
+}
+
+@Riverpod(keepAlive: true)
+class CurrentPageLabel extends _$CurrentPageLabel
+    with AutoDisposeNotifierMixin {
+  @override
+  PageLabel build() {
+    return PageLabel.dashboard;
+  }
+
+  void toPage(PageLabel pageLabel) {
+    value = pageLabel;
+  }
+
+  void toProfiles() {
+    toPage(PageLabel.profiles);
+  }
+}
+
+@Riverpod(keepAlive: true)
+class SortNum extends _$SortNum with AutoDisposeNotifierMixin {
+  @override
+  int build() {
+    return 0;
+  }
+
+  int add() => state++;
+}
+
+@Riverpod(keepAlive: true)
+class CheckIpNum extends _$CheckIpNum with AutoDisposeNotifierMixin {
+  @override
+  int build() {
+    return 0;
+  }
+
+  int add() => state++;
+}
+
+@Riverpod(keepAlive: true)
+class BackBlock extends _$BackBlock with AutoDisposeNotifierMixin {
+  @override
+  bool build() {
+    return false;
+  }
+
+  void backBlock() {
+    value = true;
+  }
+
+  void unBackBlock() {
+    value = false;
+  }
+}
+
+@Riverpod(keepAlive: true)
+class Version extends _$Version with AutoDisposeNotifierMixin {
+  @override
+  int build() {
+    return 0;
+  }
+}
+
+@Riverpod(keepAlive: true)
+class Groups extends _$Groups with AutoDisposeNotifierMixin {
+  @override
+  List<Group> build() {
+    return [];
+  }
+}
+
+@Riverpod(keepAlive: true)
+class DelayDataSource extends _$DelayDataSource with AutoDisposeNotifierMixin {
+  @override
+  DelayMap build() {
+    return {};
+  }
+
+  void setDelay(Delay delay) {
+    if (state[delay.url]?[delay.name] != delay.value) {
+      final DelayMap newDelayMap = Map.from(state);
+      if (newDelayMap[delay.url] == null) {
+        newDelayMap[delay.url] = {};
+      }
+      newDelayMap[delay.url]![delay.name] = delay.value;
+      value = newDelayMap;
+    }
+  }
+}
+
+@Riverpod(keepAlive: true)
+class SystemUiOverlayStyleState extends _$SystemUiOverlayStyleState
+    with AutoDisposeNotifierMixin {
+  @override
+  SystemUiOverlayStyle build() {
+    return const SystemUiOverlayStyle();
+  }
+}
+
+@Riverpod(name: 'coreStatusProvider', keepAlive: true)
+class _CoreStatus extends _$CoreStatus with AutoDisposeNotifierMixin {
+  @override
+  CoreStatus build() {
+    return CoreStatus.disconnected;
+  }
+}
+
+@riverpod
+class Query extends _$Query with AutoDisposeNotifierMixin {
+  @override
+  String build(QueryTag tag) {
+    return '';
+  }
+}
+
+@Riverpod(keepAlive: true)
+class Loading extends _$Loading with AutoDisposeNotifierMixin {
+  DateTime? _start;
+  Timer? _timer;
+
+  @override
+  bool build(LoadingTag tag) {
+    return false;
+  }
+
+  void start() {
+    _timer?.cancel();
+    _timer = null;
+    _start = DateTime.now();
+    value = true;
+  }
+
+  Future<void> stop() async {
+    if (_start == null) {
+      value = false;
+      return;
+    }
+    final startedAt = _start!;
+    final elapsed = DateTime.now().difference(_start!).inMilliseconds;
+    const minDuration = 1000;
+    if (elapsed >= minDuration) {
+      value = false;
+      return;
+    }
+    _timer = Timer(Duration(milliseconds: minDuration - elapsed), () {
+      if (_start != startedAt) {
+        return;
+      }
+      value = false;
+    });
+  }
+}
+
+@riverpod
+class Items extends _$Items with AutoDisposeNotifierMixin {
+  @override
+  Set<dynamic> build(String key) {
+    return {};
+  }
+}
+
+@riverpod
+class Item extends _$Item with AutoDisposeNotifierMixin {
+  @override
+  dynamic build(String key) {
+    return null;
+  }
+}
+
+@riverpod
+class IsUpdating extends _$IsUpdating with AutoDisposeNotifierMixin {
+  @override
+  bool build(String name) {
+    return false;
+  }
+}
+
+@Riverpod(keepAlive: true)
+class NetworkDetection extends _$NetworkDetection
+    with AutoDisposeNotifierMixin {
+  static const _timeoutDisplayDelay = Duration(seconds: 2);
+
+  bool? _preIsStart;
+  CancelToken? _cancelToken;
+  Timer? _timeoutTimer;
+  int _checkVersion = 0;
+
+  @override
+  NetworkDetectionState build() {
+    ref.onDispose(() {
+      _resetCheckSession(null);
+    });
+    return const NetworkDetectionState(isLoading: true, ipInfo: null);
+  }
+
+  void startCheck() {
+    debouncer.call(FunctionTag.checkIp, () {
+      _checkIp();
+    }, duration: commonDuration);
+  }
+
+  Future<void> _checkIp() async {
+    final isInit = ref.read(initProvider);
+    if (!isInit) {
+      return;
+    }
+    final isStart = ref.read(isStartProvider);
+    if (!isStart && _preIsStart == false && state.ipInfo != null) {
+      return;
+    }
+    final cancelToken = CancelToken();
+    final version = _resetCheckSession(cancelToken);
+    commonPrint.log('checkIp start');
+    state = state.copyWith(isLoading: true, ipInfo: null);
+    _preIsStart = isStart;
+    final res = await request.checkIp(cancelToken: cancelToken);
+    commonPrint.log('checkIp res: $res');
+
+    if (!ref.mounted ||
+        version != _checkVersion ||
+        cancelToken != _cancelToken) {
+      return;
+    }
+    final ipInfo = res.data;
+    if (ipInfo == null) {
+      _delayTimeoutDisplay(version);
+      return;
+    }
+    state = state.copyWith(isLoading: false, ipInfo: ipInfo);
+  }
+
+  int _resetCheckSession(CancelToken? cancelToken) {
+    _cancelTimeoutTimer();
+    final version = ++_checkVersion;
+    final previousCancelToken = _cancelToken;
+    _cancelToken = cancelToken;
+    previousCancelToken?.cancel();
+    return version;
+  }
+
+  void _delayTimeoutDisplay(int version) {
+    _cancelTimeoutTimer();
+    _timeoutTimer = Timer(_timeoutDisplayDelay, () {
+      _timeoutTimer = null;
+      if (!ref.mounted || version != _checkVersion || state.ipInfo != null) {
+        return;
+      }
+      state = state.copyWith(isLoading: false, ipInfo: null);
+    });
+  }
+
+  void _cancelTimeoutTimer() {
+    _timeoutTimer?.cancel();
+    _timeoutTimer = null;
+  }
+}
+
+@Riverpod(keepAlive: true)
+class CurrentSSID extends _$CurrentSSID with AutoDisposeNotifierMixin {
+  @override
+  String? build() {
+    return null;
+  }
+}
+
+@Riverpod(keepAlive: true)
+class BatteryOptimizationDisable extends _$BatteryOptimizationDisable
+    with AutoDisposeNotifierMixin {
+  @override
+  bool build() {
+    return false;
+  }
+}
+
+@Riverpod(keepAlive: true)
+class LocationPermissions extends _$LocationPermissions
+    with AutoDisposeNotifierMixin {
+  @override
+  WifiSsidPermission build() {
+    return WifiSsidPermission.denied;
+  }
+}
+
+List<Override> buildAppStateOverrides(AppState appState) {
+  return [
+    initProvider.overrideWithBuild((_, _) => appState.isInit),
+    backBlockProvider.overrideWithBuild((_, _) => appState.backBlock),
+    currentPageLabelProvider.overrideWithBuild((_, _) => appState.pageLabel),
+    packagesProvider.overrideWithBuild((_, _) => appState.packages),
+    sortNumProvider.overrideWithBuild((_, _) => appState.sortNum),
+    viewSizeProvider.overrideWithBuild((_, _) => appState.viewSize),
+    sideWidthProvider.overrideWithBuild((_, _) => appState.sideWidth),
+    delayDataSourceProvider.overrideWithBuild((_, _) => appState.delayMap),
+    groupsProvider.overrideWithBuild((_, _) => appState.groups),
+    checkIpNumProvider.overrideWithBuild((_, _) => appState.checkIpNum),
+    systemBrightnessProvider.overrideWithBuild((_, _) => appState.brightness),
+    runTimeProvider.overrideWithBuild((_, _) => appState.runTime),
+    providersProvider.overrideWithBuild((_, _) => appState.providers),
+    localIpProvider.overrideWithBuild((_, _) => appState.localIp),
+    requestsProvider.overrideWithBuild((_, _) => appState.requests),
+    versionProvider.overrideWithBuild((_, _) => appState.version),
+    logsProvider.overrideWithBuild((_, _) => appState.logs),
+    trafficsProvider.overrideWithBuild((_, _) => appState.traffics),
+    totalTrafficProvider.overrideWithBuild((_, _) => appState.totalTraffic),
+    realTunEnableProvider.overrideWithBuild((_, _) => appState.realTunEnable),
+    systemUiOverlayStyleStateProvider.overrideWithBuild(
+      (_, _) => appState.systemUiOverlayStyle,
+    ),
+    coreStatusProvider.overrideWithBuild((_, _) => appState.coreStatus),
+  ];
+}
