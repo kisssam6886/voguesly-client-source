@@ -10,7 +10,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 ///
 /// 点解:「连接方式」同「附加规则」原本收喺「我的 → 进阶」好深,要改嘅人揾唔到;
 /// 摆返仪表盘做开关卡又变返 0.9.83 移走嘅「工程卡」。齿轮 = 默认干净,要改嘅人一撳就到。
-/// - 连接方式(只限桌面):增强(TUN)/ 兼容(系统代理)二选一。安卓行系统 VPN,冇呢个分别。
+/// - 连接方式(只限桌面):[0.9.98] 增强模式(TUN)/ 系统代理 两个开关,可以同时开、唔准两个都关;
+///   同网络页共用状态同文案,写入一律经 SetupAction.setEnhancedByUser / setSystemProxyByUser。
+///   安卓行系统 VPN,冇呢个分别。
 /// - 附加规则:全局附加规则(唔跟订阅,重新登录重导订阅都唔会冇),插喺订阅规则之前。
 ///   ⚠️ 09-23 Sam 手输一条 DOMAIN-SUFFIX 令成个客户端瘫咗一日 ⇒ 呢度一律**下拉 + 校验**,
 ///   打唔出格式错嘅规则;目标只可以喺现有线路入面揀(task.dart 另外会跳过目标唔存在嘅规则)。
@@ -84,116 +86,116 @@ class _SectionTitle extends StatelessWidget {
 class _ConnModePicker extends ConsumerWidget {
   const _ConnModePicker();
 
-  void _select(WidgetRef ref, bool enhanced) {
-    if (enhanced) {
-      // 系统代理唔喺呢度关:0.9.86 定案 —— TUN 确认接管到先由 _verifyDesktopTunConnected 关,
-      // 否则 TUN 起唔到嗰三十几秒用户会「显示已连接但上唔到网」。
-      final setup = ref.read(setupActionProvider.notifier);
-      setup.resetTunSessionFlags();
-      final already = ref.read(patchClashConfigProvider).tun.enable;
-      ref
-          .read(patchClashConfigProvider.notifier)
-          .update((state) => state.copyWith.tun(enable: true));
-      // [0.9.88] 设定值本来已经係 true(TUN 失败后自动用紧兼容)⇒ 上面嘅 update 冇变化、唔会重新下发,手动重试一次。
-      if (already) setup.updateConfigDebounce();
-    } else {
-      ref
-          .read(networkSettingProvider.notifier)
-          .update((state) => state.copyWith(systemProxy: true));
-      ref
-          .read(patchClashConfigProvider.notifier)
-          .update((state) => state.copyWith.tun(enable: false));
-    }
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l = currentAppLocalizations;
+    final setup = ref.read(setupActionProvider.notifier);
     final tun = ref.watch(patchClashConfigProvider.select((s) => s.tun.enable));
-    // [0.9.88] 已连接时显示「实际」状态:TUN 失败会自动退到兼容(tun 设定值仍然係 true),
-    //   之前面板照样显示「增强」而且撳唔到,用户想重试都冇办法。两者唔一致时两个都可以撳。
+    final systemProxy = ref.watch(networkSettingProvider.select((s) => s.systemProxy));
+    // [0.9.88] 已连接时显示「实际」状态:TUN 失败会自动退到系统代理(tun 设定值仍然係 true)。
+    //   开关显示关 + 一句说明,撳开 = 重试。
     final isStart = ref.watch(isStartProvider);
     final realTun = ref.watch(realTunEnableProvider);
     final enhancedNow = isStart ? realTun : tun;
-    final mismatch = enhancedNow != tun;
+    final fellBack = isStart && tun && !realTun;
+    // [0.9.98] Linux 暂时开唔到增强模式(客服口径:开咗反而唔通)⇒ 关住时灰咗;已经开咗嘅仍然可以关。
+    final linuxNoTun = system.isLinux && !enhancedNow;
     return Column(
       children: [
-        _ModeTile(
-          selected: enhancedNow,
-          tappable: !enhancedNow || mismatch,
+        _ModeSwitch(
+          value: enhancedNow,
+          enabled: !linuxNoTun,
           icon: Icons.shield_outlined,
-          title: l.vgConnModeEnhanced,
+          title: l.vgConnModeEnhancedRec,
           desc: l.vgConnModeEnhancedDesc,
-          onTap: () => _select(ref, true),
+          note: linuxNoTun ? l.vgConnModeLinuxNoTun : (fellBack ? l.vgConnModeFellBack : null),
+          onChanged: setup.setEnhancedByUser,
         ),
         const SizedBox(height: 8),
-        _ModeTile(
-          selected: !enhancedNow,
-          tappable: enhancedNow || mismatch,
+        _ModeSwitch(
+          value: systemProxy,
+          enabled: true,
           icon: Icons.language,
           title: l.vgConnModeCompat,
           desc: l.vgConnModeCompatDesc,
-          onTap: () => _select(ref, false),
+          onChanged: setup.setSystemProxyByUser,
         ),
       ],
     );
   }
 }
 
-class _ModeTile extends StatelessWidget {
-  final bool selected;
-  final bool tappable;
+/// 只畀离线出图(test/golden)用。
+@visibleForTesting
+Widget vogueslyConnModePickerPreview() => const _ConnModePicker();
+
+class _ModeSwitch extends StatelessWidget {
+  final bool value;
+  final bool enabled;
   final IconData icon;
   final String title;
   final String desc;
-  final VoidCallback onTap;
+  final String? note;
+  final bool Function(bool) onChanged;
 
-  const _ModeTile({
-    required this.selected,
-    required this.tappable,
+  const _ModeSwitch({
+    required this.value,
+    required this.enabled,
     required this.icon,
     required this.title,
     required this.desc,
-    required this.onTap,
+    required this.onChanged,
+    this.note,
   });
 
   @override
   Widget build(BuildContext context) {
     final cs = context.colorScheme;
     return Material(
-      color: selected ? cs.primaryContainer.withValues(alpha: 0.5) : cs.surfaceContainerLow,
+      color: value ? cs.primaryContainer.withValues(alpha: 0.5) : cs.surfaceContainerLow,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: tappable ? onTap : null,
+        onTap: enabled ? () => onChanged(!value) : null,
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(
-                selected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                color: selected ? cs.primary : cs.onSurfaceVariant,
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Icon(icon, size: 20, color: value ? cs.primary : cs.onSurfaceVariant),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Icon(icon, size: 16, color: cs.onSurfaceVariant),
-                        const SizedBox(width: 6),
-                        Flexible(child: Text(title, style: context.textTheme.titleSmall)),
-                      ],
+                    Text(
+                      title,
+                      style: context.textTheme.titleSmall?.copyWith(
+                        color: enabled ? null : cs.onSurfaceVariant.opacity60,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       desc,
                       style: context.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                     ),
+                    if (note != null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        note!,
+                        style: context.textTheme.bodySmall?.copyWith(color: const Color(0xFFE09A00)),
+                      ),
+                    ],
                   ],
                 ),
+              ),
+              const SizedBox(width: 8),
+              Switch(
+                value: value,
+                onChanged: enabled ? (v) => onChanged(v) : null,
               ),
             ],
           ),

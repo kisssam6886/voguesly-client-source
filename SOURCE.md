@@ -5,6 +5,7 @@ This repository provides the Corresponding Source for released builds of the Vog
 
 | 发布版本 Release | 对应源码 Source | 发布日期 Date |
 |---|---|---|
+| 0.9.98 (`0.9.98+2026100602`) | 本仓库 tag `v0.9.98` | 2026-10-06 |
 | 0.9.97 (`0.9.97+2026100101`) | 本仓库 tag `v0.9.97` | 2026-10-01 |
 
 ## 来源 Upstream

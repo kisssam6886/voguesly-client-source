@@ -104,7 +104,7 @@ class MessageLookup extends MessageLookupByLibrary {
 
   static String m40(rate) => "現在の経路は ${rate}x のため、国内サイトも ${rate} 倍で加算されます。";
 
-  static String m41(p0) => "${p0}；引き続きシステムプロキシ（互換モード）で通信します。";
+  static String m41(p0) => "${p0}；引き続きシステムプロキシで通信します。";
 
   static String m42(p0) => "最終更新 · 本日 ${p0}";
 
@@ -159,72 +159,80 @@ class MessageLookup extends MessageLookupByLibrary {
 
   static String m66(p0) => "先に「${p0}」の VPN をオフにしてください";
 
-  static String m67(p0) => "決済を開始できませんでした: ${p0}";
+  static String m67(p0) =>
+      "「${p0}」の VPN もオンになっています。通信が易聯を通らず、そちらに取られている可能性があります。${p0} を開いて VPN スイッチをオフにしてください（アプリを終了するだけでは不十分です）。";
 
-  static String m68(p0) => "確認中 ${p0}（確定後に利用可能）";
+  static String m68(p0) => "決済を開始できませんでした: ${p0}";
 
-  static String m69(p0) => "ご利用のプランでは同時に ${p0} 台まで接続できます。";
+  static String m69(p0) => "確認中 ${p0}（確定後に利用可能）";
 
-  static String m70(p0) => "Voguesly を指しています · ${p0}";
+  static String m70(p0, p1) =>
+      "「${p0}」${p1} はまだ支払われていません。この注文を支払うか、取り消して新しく注文できます。";
 
-  static String m71(p0, p1) =>
+  static String m71(p0) => "ご利用のプランでは同時に ${p0} 台まで接続できます。";
+
+  static String m72(p0) => "Voguesly を指しています · ${p0}";
+
+  static String m73(p0, p1) =>
       "${p0} が ${p1} を占有しているため、Voguesly のコアがバインドできません。これがまさに「接続済みと表示されるのにインターネットに繋がらない」";
 
-  static String m72(p0) => "外部向け通信は ${p0} を通っており、Voguesly の仮想 NIC ではありません —— ";
-
-  static String m73(p0) => "送信に失敗しました: ${p0}";
-
-  static String m74(p0) => "速度制限 ${p0} Mbps";
+  static String m74(p0) => "外部向け通信は ${p0} を通っており、Voguesly の仮想 NIC ではありません —— ";
 
   static String m75(p0) => "送信に失敗しました: ${p0}";
 
-  static String m78(p0) => "${p0}（互換モード）";
+  static String m76(p0) => "速度制限 ${p0} Mbps";
 
-  static String m79(p0, p1) =>
+  static String m77(p0) => "送信に失敗しました: ${p0}";
+
+  static String m80(p0) => "${p0}";
+
+  static String m81(p0, p1) =>
       "システムプロキシ設定はマシンに 1 つだけで、後から書いた側が勝ちます。現在は ${p0} を指しており、Voguesly の ${p1} ではありません。";
 
-  static String m80(p0) => "他のアプリが取得 · ${p0}";
+  static String m82(p0) => "他のアプリが取得 · ${p0}";
 
-  static String m81(p0) => "他のプロセスが占有 · ${p0}";
+  static String m83(p0) => "他のプロセスが占有 · ${p0}";
 
-  static String m82(p0) => "タップして切断  ·  ${p0}";
+  static String m84(p0) => "タップして切断  ·  ${p0}";
 
-  static String m83(p0) => "${p0}；オンラインを維持するためシステムプロキシ（互換モード）を一時的に有効にしました。";
+  static String m85(p0) => "${p0}；オンラインを維持するためシステムプロキシを一時的にオンにしました。";
 
-  static String m84(p0) => "チケット #${p0}";
+  static String m86(p0) => "チケット #${p0}";
 
-  static String m86(p0) => "データ ${p0} GB";
+  static String m88(p0) => "データ ${p0} GB";
 
-  static String m87(p0) => "${p0}（デバイス全体）";
+  static String m89(p0) => "お試しプランの残りがわずかです（残り ${p0}）。今アップグレードすれば途切れません。";
 
-  static String m88(p0) =>
+  static String m90(p0) => "強化モード（${p0}）";
+
+  static String m91(p0) =>
       "Voguesly は起動していますが、公衆トラフィックは Voguesly の仮想 NIC ではなく ${p0} を経由しています — ノードとルールは実際には有効になっていません。そのアプリを完全に終了するか、そのアプリのネットワーク引き継ぎをオフにしてから、Voguesly で再接続してください。";
 
-  static String m89(p0, p1) => "${p0} / ${p1} 使用";
+  static String m92(p0, p1) => "${p0} / ${p1} 使用";
 
-  static String m90(p0, p1) => "バージョン: ${p0}+${p1}";
+  static String m93(p0, p1) => "バージョン: ${p0}+${p1}";
 
-  static String m91(p0) => "バージョン: ${p0}";
+  static String m94(p0) => "バージョン: ${p0}";
 
-  static String m92(p0) => "v${p0} · タップして更新を確認";
+  static String m95(p0) => "v${p0} · タップして更新を確認";
 
-  static String m93(p0) => "Voguesly が制御中 · ${p0}";
+  static String m96(p0) => "Voguesly が制御中 · ${p0}";
 
-  static String m94(p0) => "アプリはすでに ${p0} でログインしています";
+  static String m97(p0) => "アプリはすでに ${p0} でログインしています";
 
-  static String m95(p0) =>
+  static String m98(p0) =>
       "ウェブのアカウント ${p0} が易聯アプリへのログインを求めています。\nウェブで「アプリでログイン」を押した場合のみ続行してください。";
 
-  static String m96(p0) =>
+  static String m99(p0) =>
       "ウェブのアカウント ${p0} が易聯アプリへのログインを求めています。現在のアカウントはログアウトされます。\nウェブで「アプリでログイン」を押した場合のみ続行してください。";
 
-  static String m97(p0) => "${p0} でログインしました";
+  static String m100(p0) => "${p0} でログインしました";
 
-  static String m98(p0) => "WebView の初期化に失敗しました: ${p0}";
+  static String m101(p0) => "WebView の初期化に失敗しました: ${p0}";
 
-  static String m99(p0) => "残高への振替は全額利用できます。出金は注文支払額の ${p0}% で精算されます。";
+  static String m102(p0) => "残高への振替は全額利用できます。出金は注文支払額の ${p0}% で精算されます。";
 
-  static String m100(count) => "${count}年前";
+  static String m103(count) => "${count}年前";
 
   final messages = _notInlinedMessages(_notInlinedMessages);
   static Map<String, Function> _notInlinedMessages(_) => <String, Function>{
@@ -1055,6 +1063,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "vgBalance": MessageLookupByLibrary.simpleMessage("残高"),
     "vgBelowMinWithdrawWith": m21,
     "vgBiliHkMoTw": MessageLookupByLibrary.simpleMessage("bilibili（香港・マカオ・台湾）"),
+    "vgBiliHkNaNote": MessageLookupByLibrary.simpleMessage("bilibili は国内直結"),
     "vgBiliMainland": MessageLookupByLibrary.simpleMessage("bilibili（中国本土）"),
     "vgBilibili": MessageLookupByLibrary.simpleMessage("bilibili"),
     "vgBuyNow": MessageLookupByLibrary.simpleMessage("今すぐ購入"),
@@ -1069,6 +1078,9 @@ class MessageLookup extends MessageLookupByLibrary {
     "vgCancel": MessageLookupByLibrary.simpleMessage("キャンセル"),
     "vgCancelFailedRetry": MessageLookupByLibrary.simpleMessage(
       "キャンセルできませんでした。しばらくしてから再試行してください",
+    ),
+    "vgCancelOldOrderFailed": MessageLookupByLibrary.simpleMessage(
+      "以前の注文を取り消せませんでした。「注文履歴」で取り消してから再度お試しください。",
     ),
     "vgCancelOrder": MessageLookupByLibrary.simpleMessage("注文をキャンセル"),
     "vgCancelOrderConfirm": m23,
@@ -1107,23 +1119,36 @@ class MessageLookup extends MessageLookupByLibrary {
     "vgCollapse": MessageLookupByLibrary.simpleMessage("折りたたむ"),
     "vgCommissionRateWith": m24,
     "vgCompatModeOnlyProxyAware": MessageLookupByLibrary.simpleMessage(
-      "注意：互換モードはシステムプロキシに従うアプリのみ対象です。Telegram などは接続できない場合があります。",
+      "注意：システムプロキシだけの場合、システムプロキシに従うアプリのみ対象です。Telegram などは接続できない場合があります。",
     ),
     "vgCompatModeTakenOver": MessageLookupByLibrary.simpleMessage(
-      "システムプロキシ（互換モード）が他のプロキシアプリに奪われているため、Voguesly の互換モードは現在無効です。",
+      "システムプロキシが他のプロキシアプリに奪われているため、Voguesly のシステムプロキシは現在無効です。",
     ),
     "vgConfigParseFailed": MessageLookupByLibrary.simpleMessage(
       "設定を読み込めませんでした。サブスクリプションを更新するかサポートにご連絡ください。",
     ),
     "vgConfirmChange": MessageLookupByLibrary.simpleMessage("変更を確定"),
     "vgConfirmNewPassword": MessageLookupByLibrary.simpleMessage("新しいパスワードを確認"),
-    "vgConnModeCompat": MessageLookupByLibrary.simpleMessage("互換モード"),
+    "vgConnModeBoth": MessageLookupByLibrary.simpleMessage("強化モード + システムプロキシ"),
+    "vgConnModeCompat": MessageLookupByLibrary.simpleMessage("システムプロキシ"),
     "vgConnModeCompatDesc": MessageLookupByLibrary.simpleMessage(
-      "ブラウザなど「システムプロキシ」設定に従うアプリだけが易聯を経由します。パスワード不要ですが、一部のアプリは経由しない場合があります。",
+      "ブラウザなど「システムプロキシ」設定に従うアプリが易聯を経由します。パスワード不要。強化モードと同時にオンにできます。これだけの場合、一部のアプリは経由しないことがあります。",
     ),
     "vgConnModeEnhanced": MessageLookupByLibrary.simpleMessage("強化モード"),
     "vgConnModeEnhancedDesc": MessageLookupByLibrary.simpleMessage(
       "パソコン全体の通信を引き受け、すべてのアプリが易聯を経由します。初回のみパソコンのパスワードを求められます。",
+    ),
+    "vgConnModeEnhancedRec": MessageLookupByLibrary.simpleMessage(
+      "強化モード（おすすめ）",
+    ),
+    "vgConnModeFellBack": MessageLookupByLibrary.simpleMessage(
+      "今回は強化モードが引き継げなかったため、システムプロキシで接続しています。スイッチをオンにすると再試行します。",
+    ),
+    "vgConnModeLinuxNoTun": MessageLookupByLibrary.simpleMessage(
+      "Linux 版は現在強化モードに対応していません。システムプロキシをご利用ください。",
+    ),
+    "vgConnModeNeedOne": MessageLookupByLibrary.simpleMessage(
+      "少なくとも一つはオンにしてください。両方オフだとパソコンのアプリがネットに接続できません。",
     ),
     "vgConnModeTitle": MessageLookupByLibrary.simpleMessage("接続方式"),
     "vgConnectTimeoutRetry": MessageLookupByLibrary.simpleMessage(
@@ -1257,7 +1282,7 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "vgGlobalAcceleration": MessageLookupByLibrary.simpleMessage("グローバル高速化"),
     "vgGlobalBanner": MessageLookupByLibrary.simpleMessage(
-      "グローバルモード中：中国国内のサイトも海外経路を経由するため遅くなり、経路の倍率で通信量が加算されます。",
+      "グローバルモード中：中国国内のサイトも海外経路を経由するため遅くなります。",
     ),
     "vgGlobalBannerRate": m40,
     "vgGlobalBannerSwitch": MessageLookupByLibrary.simpleMessage("スマート分流に戻す"),
@@ -1433,6 +1458,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "チケットはまだありません\n問題がある場合は「不具合の報告 / ログ送信」から送信してください",
     ),
     "vgNoUsageThisMonth": MessageLookupByLibrary.simpleMessage("今月の使用記録はありません"),
+    "vgNotApplicable": MessageLookupByLibrary.simpleMessage("対象外"),
     "vgNotChecked": MessageLookupByLibrary.simpleMessage("未検出"),
     "vgNotConnectedTapCircle": MessageLookupByLibrary.simpleMessage(
       "Voguesly が未接続です。ホーム画面の大きな円をタップして接続してから、もう一度検出してください。",
@@ -1473,6 +1499,10 @@ class MessageLookup extends MessageLookupByLibrary {
     "vgOpenDownloadPage": MessageLookupByLibrary.simpleMessage("ダウンロードページを開く"),
     "vgOpenPayment": MessageLookupByLibrary.simpleMessage("支払いを開く"),
     "vgOpenSettingsToGrant": MessageLookupByLibrary.simpleMessage("設定を開いて許可する"),
+    "vgOpenSource": MessageLookupByLibrary.simpleMessage("オープンソースライセンスとソースコード"),
+    "vgOpenSourceDesc": MessageLookupByLibrary.simpleMessage(
+      "Voguesly は FlClash と mihomo コア(GPL-3.0)をベースにしています。タップしてソースコードを表示",
+    ),
     "vgOpenSupportFailedRetry": MessageLookupByLibrary.simpleMessage(
       "サポートを開けませんでした。しばらくしてから再試行してください",
     ),
@@ -1485,6 +1515,9 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "vgOr": MessageLookupByLibrary.simpleMessage("または"),
     "vgOrderActivating": MessageLookupByLibrary.simpleMessage("開通処理中"),
+    "vgOrderActivatingWait": MessageLookupByLibrary.simpleMessage(
+      "注文を有効化しています。1分後にもう一度お試しください。",
+    ),
     "vgOrderCancelled": MessageLookupByLibrary.simpleMessage("キャンセル済み"),
     "vgOrderCancelledToast": MessageLookupByLibrary.simpleMessage(
       "注文をキャンセルしました",
@@ -1511,6 +1544,7 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "vgOtherVpnBlocksBody": m65,
     "vgOtherVpnBlocksTitle": m66,
+    "vgOtherVpnWhileConnected": m67,
     "vgOutboundModeTitle": MessageLookupByLibrary.simpleMessage("ルーティング"),
     "vgPassword": MessageLookupByLibrary.simpleMessage("パスワード"),
     "vgPasswordChanged": MessageLookupByLibrary.simpleMessage("パスワードを変更しました"),
@@ -1527,23 +1561,27 @@ class MessageLookup extends MessageLookupByLibrary {
     "vgPaymentStartFailed": MessageLookupByLibrary.simpleMessage(
       "決済を開始できませんでした",
     ),
-    "vgPaymentStartFailedWith": m67,
+    "vgPaymentStartFailedWith": m68,
     "vgPaymentSuccessActivated": MessageLookupByLibrary.simpleMessage(
       "お支払いが完了し、プランが有効になりました",
     ),
     "vgPayoutAccount": MessageLookupByLibrary.simpleMessage("受取口座"),
-    "vgPendingCommissionWith": m68,
+    "vgPendingCancelAndNew": MessageLookupByLibrary.simpleMessage("取り消して新しく注文"),
+    "vgPendingCommissionWith": m69,
+    "vgPendingContinuePay": MessageLookupByLibrary.simpleMessage("支払いを続ける"),
+    "vgPendingOrderBody": m70,
+    "vgPendingOrderTitle": MessageLookupByLibrary.simpleMessage("未払いの注文があります"),
     "vgPkgOpenedQuitting": MessageLookupByLibrary.simpleMessage(
       "PKG インストーラーを開きました。Voguesly は安全に終了します。システムの指示に従って承認してください。インストーラーが Applications 内の旧バージョンを置き換えます。",
     ),
     "vgPlacingOrder": MessageLookupByLibrary.simpleMessage("注文処理中…"),
     "vgPlan": MessageLookupByLibrary.simpleMessage("プラン"),
-    "vgPlanDeviceLimitWith": m69,
+    "vgPlanDeviceLimitWith": m71,
     "vgPlatformNoLocalDiag": MessageLookupByLibrary.simpleMessage(
       "このプラットフォームではローカル環境診断に対応していません。",
     ),
-    "vgPointsToVogueslyWith": m70,
-    "vgPortHeldByOther": m71,
+    "vgPointsToVogueslyWith": m72,
+    "vgPortHeldByOther": m73,
     "vgPortHeldByOther2": MessageLookupByLibrary.simpleMessage(
       "という、最も原因を突き止めにくい不具合です。「設定 → ネットワーク」で使われていないポートに変更できます。",
     ),
@@ -1554,7 +1592,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "このページのアンロック／遅延検出は測定できなくなります。",
     ),
     "vgPreparingInstall": MessageLookupByLibrary.simpleMessage("インストールの準備中…"),
-    "vgPublicTrafficOnOtherTun": m72,
+    "vgPublicTrafficOnOtherTun": m74,
     "vgPublicTrafficOnOurTun": MessageLookupByLibrary.simpleMessage(
       "外部向け通信は Voguesly の仮想 NIC を通っています。これが主経路で、システムプロキシには依存しません。",
     ),
@@ -1600,6 +1638,10 @@ class MessageLookup extends MessageLookupByLibrary {
     "vgReopenPayment": MessageLookupByLibrary.simpleMessage("支払いを再度開く"),
     "vgReopenTunAfterPermission": MessageLookupByLibrary.simpleMessage(
       "拡張モードを再試行するには、接続をオフにしてからもう一度オンにしてください（アプリの再起動は不要です）。",
+    ),
+    "vgReplaceConfirmAction": MessageLookupByLibrary.simpleMessage("購入する"),
+    "vgReplaceConfirmTitle": MessageLookupByLibrary.simpleMessage(
+      "現在のプランを置き換えますか？",
     ),
     "vgReplyToSupport": MessageLookupByLibrary.simpleMessage("サポートに返信…"),
     "vgReportIssueSubtitle": MessageLookupByLibrary.simpleMessage(
@@ -1673,7 +1715,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "vgSendFailedRetryComma": MessageLookupByLibrary.simpleMessage(
       "送信に失敗しました。しばらくしてから再試行してください",
     ),
-    "vgSendFailedWith": m73,
+    "vgSendFailedWith": m75,
     "vgSent": MessageLookupByLibrary.simpleMessage("送信しました"),
     "vgSessionExpiredSignInAgain": MessageLookupByLibrary.simpleMessage(
       "セッションの有効期限が切れました。再度ログインしてください。",
@@ -1719,7 +1761,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "vgSomethingWentWrongRetry": MessageLookupByLibrary.simpleMessage(
       "エラーが発生しました。しばらくしてから再試行してください",
     ),
-    "vgSpeedLimitNMbps": m74,
+    "vgSpeedLimitNMbps": m76,
     "vgSplitGeneralSites": MessageLookupByLibrary.simpleMessage("一般サイト"),
     "vgSplitRouteHint": MessageLookupByLibrary.simpleMessage(
       "海外サービスは海外出口、国内サービスはローカル経由 —— スマートルーティングをリアルタイムで検証します。AI と IP チェックサイトは米国住宅回線を使うため、「一般サイト」と IP が異なるのは正常です。",
@@ -1738,7 +1780,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "vgSubmitFailedRetry": MessageLookupByLibrary.simpleMessage(
       "送信に失敗しました。しばらくしてから再試行してください",
     ),
-    "vgSubmitFailedWith": m75,
+    "vgSubmitFailedWith": m77,
     "vgSubmitToSupport": MessageLookupByLibrary.simpleMessage("サポートに送信"),
     "vgSubmittedSupportWillFollowUp": MessageLookupByLibrary.simpleMessage(
       "送信しました。サポートが順次対応します。",
@@ -1759,31 +1801,34 @@ class MessageLookup extends MessageLookupByLibrary {
       "グローバル高速化に切り替えました",
     ),
     "vgSystemProxy": MessageLookupByLibrary.simpleMessage("システムプロキシ"),
-    "vgSystemProxyCompat": m78,
+    "vgSystemProxyCompat": m80,
     "vgSystemProxyCompatDesc": MessageLookupByLibrary.simpleMessage(
       "システムプロキシに対応したアプリのみ対象です。Telegram などは TUN が必要な場合があります",
     ),
     "vgSystemProxyOccupied": MessageLookupByLibrary.simpleMessage(
       "システムプロキシが通信を引き継げませんでした。他のプロキシアプリに占有されている可能性があります。終了してから再試行してください。",
     ),
-    "vgSystemProxySingleSlot": m79,
-    "vgTakenByOtherAppWith": m80,
-    "vgTakenByOtherProcessWith": m81,
+    "vgSystemProxySingleSlot": m81,
+    "vgTakenByOtherAppWith": m82,
+    "vgTakenByOtherProcessWith": m83,
     "vgTaobao": MessageLookupByLibrary.simpleMessage("淘宝"),
     "vgTapBelowToFetchNodes": MessageLookupByLibrary.simpleMessage(
       "下のボタンをタップして最新のノードを取得",
     ),
     "vgTapToActivate": MessageLookupByLibrary.simpleMessage("タップして開通"),
     "vgTapToConnect": MessageLookupByLibrary.simpleMessage("タップして接続"),
-    "vgTapToDisconnectWith": m82,
+    "vgTapToDisconnectWith": m84,
     "vgTelegramSupport": MessageLookupByLibrary.simpleMessage("Telegram サポート"),
-    "vgTempEnabledSystemProxy": m83,
+    "vgTempEnabledSystemProxy": m85,
     "vgTesting": MessageLookupByLibrary.simpleMessage("テスト中…"),
+    "vgThirdPartyLicenses": MessageLookupByLibrary.simpleMessage(
+      "サードパーティライセンス",
+    ),
     "vgThreeYearly": MessageLookupByLibrary.simpleMessage("3 年"),
     "vgTicketAwaitingReply": MessageLookupByLibrary.simpleMessage("返信待ち"),
     "vgTicketClosed": MessageLookupByLibrary.simpleMessage("クローズ済み"),
     "vgTicketIsClosed": MessageLookupByLibrary.simpleMessage("チケットはクローズされました"),
-    "vgTicketNumber": m84,
+    "vgTicketNumber": m86,
     "vgTicketSupportReplied": MessageLookupByLibrary.simpleMessage(
       "サポートが返信しました",
     ),
@@ -1791,7 +1836,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "vgTotal": MessageLookupByLibrary.simpleMessage("合計"),
     "vgTotalDownload": MessageLookupByLibrary.simpleMessage("総ダウンロード"),
     "vgTotalUpload": MessageLookupByLibrary.simpleMessage("総アップロード"),
-    "vgTrafficNGb": m86,
+    "vgTrafficNGb": m88,
     "vgTrafficStillOnTun": MessageLookupByLibrary.simpleMessage(
       "通信は引き続き Voguesly の仮想 NIC が処理しているため、インターネット利用に影響はありません。",
     ),
@@ -1802,6 +1847,13 @@ class MessageLookup extends MessageLookupByLibrary {
     "vgTransferredToBalance": MessageLookupByLibrary.simpleMessage(
       "残高に振り替えました",
     ),
+    "vgTrialEndedBanner": MessageLookupByLibrary.simpleMessage(
+      "お試しプランを使い切りました。正式プランにアップグレードしてご利用ください。",
+    ),
+    "vgTrialExpiredBanner": MessageLookupByLibrary.simpleMessage(
+      "お試しプランの期限が切れました。正式プランにアップグレードしてご利用ください。",
+    ),
+    "vgTrialLowBanner": m89,
     "vgTrialSpecs": MessageLookupByLibrary.simpleMessage(
       "6 時間 / 500MB —— 接続確認に最適",
     ),
@@ -1811,7 +1863,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "vgTunAlsoNotInControlNote": MessageLookupByLibrary.simpleMessage(
       "仮想 NIC も引き継いでいないため、現在は本当にオフラインの可能性があります。",
     ),
-    "vgTunDeviceWide": m87,
+    "vgTunDeviceWide": m90,
     "vgTunDeviceWideDesc": MessageLookupByLibrary.simpleMessage(
       "デバイス全体の通信を引き継ぎます。他の VPN を終了し、システム権限の承認が必要です",
     ),
@@ -1819,7 +1871,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "TUN が承認されなかったため、現在デバイス全体の通信を引き継げません。",
     ),
     "vgTunOffUsingCompatMode": MessageLookupByLibrary.simpleMessage(
-      "仮想 NIC はオフです。現在はシステムプロキシ互換モードで動作しています。",
+      "強化モードはオフです。現在はシステムプロキシのみで動作しています。",
     ),
     "vgTunOnButNoUtun": MessageLookupByLibrary.simpleMessage(
       "設定では仮想 NIC が有効ですが、外部向け通信が utun を通っていません。承認が未完了の可能性があります。",
@@ -1839,7 +1891,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "vgTunServiceNotEnabled": MessageLookupByLibrary.simpleMessage(
       "Voguesly のバックグラウンド TUN サービスが有効になっていません。システム設定でバックグラウンド項目を許可してから再試行してください。",
     ),
-    "vgTunTakenByOtherVpn": m88,
+    "vgTunTakenByOtherVpn": m91,
     "vgTunTwiceNoTakeover": MessageLookupByLibrary.simpleMessage(
       "TUN を 2 回起動しましたが、システムの通信を引き継げませんでした。",
     ),
@@ -1849,6 +1901,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "vgTurnOnVoguesly": MessageLookupByLibrary.simpleMessage("Voguesly をオンにする"),
     "vgTwoYearly": MessageLookupByLibrary.simpleMessage("2 年"),
     "vgUnknown": MessageLookupByLibrary.simpleMessage("不明"),
+    "vgUnlockAfterConnect": MessageLookupByLibrary.simpleMessage("接続後に検出"),
     "vgUnlockCheck": MessageLookupByLibrary.simpleMessage("アンロック検出"),
     "vgUntested": MessageLookupByLibrary.simpleMessage("未測定"),
     "vgUpdateCheckNetworkError": MessageLookupByLibrary.simpleMessage(
@@ -1868,7 +1921,8 @@ class MessageLookup extends MessageLookupByLibrary {
       "サブスクリプションを更新できませんでした。しばらくしてから再試行してください",
     ),
     "vgUpdating": MessageLookupByLibrary.simpleMessage("更新中…"),
-    "vgUsedOfWith": m89,
+    "vgUpgradePlan": MessageLookupByLibrary.simpleMessage("アップグレード"),
+    "vgUsedOfWith": m92,
     "vgUserCenter": MessageLookupByLibrary.simpleMessage("アカウントセンター"),
     "vgUserCenterSubtitle": MessageLookupByLibrary.simpleMessage(
       "残高、注文、サブスクリプションのリセット、パスワード変更",
@@ -1876,10 +1930,10 @@ class MessageLookup extends MessageLookupByLibrary {
     "vgV2RayFamilyClient": MessageLookupByLibrary.simpleMessage(
       "V2Ray 系クライアント",
     ),
-    "vgVersionBuildWith": m90,
+    "vgVersionBuildWith": m93,
     "vgVersionLabel": MessageLookupByLibrary.simpleMessage("バージョン"),
-    "vgVersionNumber": m91,
-    "vgVersionTapToCheck": m92,
+    "vgVersionNumber": m94,
+    "vgVersionTapToCheck": m95,
     "vgViewLogs": MessageLookupByLibrary.simpleMessage("ログを表示"),
     "vgViewLogsSubtitle": MessageLookupByLibrary.simpleMessage(
       "リアルタイムの接続ログ。トラブルシューティング用",
@@ -1893,7 +1947,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "vgVogueslyInControl": MessageLookupByLibrary.simpleMessage(
       "Voguesly が制御中",
     ),
-    "vgVogueslyInControlWith": m93,
+    "vgVogueslyInControlWith": m96,
     "vgVogueslyListening": MessageLookupByLibrary.simpleMessage(
       "Voguesly が待ち受け中",
     ),
@@ -1903,15 +1957,15 @@ class MessageLookup extends MessageLookupByLibrary {
     "vgWaitingForPayment": MessageLookupByLibrary.simpleMessage("入金待ち"),
     "vgWeChat": MessageLookupByLibrary.simpleMessage("WeChat"),
     "vgWebLoginAction": MessageLookupByLibrary.simpleMessage("ログイン"),
-    "vgWebLoginAlready": m94,
-    "vgWebLoginConfirm": m95,
-    "vgWebLoginConfirmSwitch": m96,
-    "vgWebLoginDone": m97,
+    "vgWebLoginAlready": m97,
+    "vgWebLoginConfirm": m98,
+    "vgWebLoginConfirmSwitch": m99,
+    "vgWebLoginDone": m100,
     "vgWebLoginExpired": MessageLookupByLibrary.simpleMessage(
       "認証の有効期限が切れました（60 秒間有効）。ウェブに戻り「アプリでログイン」をもう一度押してください。",
     ),
     "vgWebLoginTitle": MessageLookupByLibrary.simpleMessage("ウェブから認証ログイン"),
-    "vgWebViewInitFailed": m98,
+    "vgWebViewInitFailed": m101,
     "vgWithdraw": MessageLookupByLibrary.simpleMessage("出金"),
     "vgWithdrawClosed": MessageLookupByLibrary.simpleMessage(
       "現在出金は受け付けていません。残高に振り替えて更新料に充当できます。",
@@ -1919,7 +1973,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "vgWithdrawFailed": MessageLookupByLibrary.simpleMessage("出金に失敗しました"),
     "vgWithdrawMethod": MessageLookupByLibrary.simpleMessage("出金方法"),
     "vgWithdrawRequest": MessageLookupByLibrary.simpleMessage("出金申請"),
-    "vgWithdrawSettleWith": m99,
+    "vgWithdrawSettleWith": m102,
     "vgWithdrawSubmitted": MessageLookupByLibrary.simpleMessage(
       "出金申請を送信しました。サポートが順次対応します。",
     ),
@@ -1947,7 +2001,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "vpnTip": MessageLookupByLibrary.simpleMessage("変更はVPN再起動後に有効"),
     "webDAVConfiguration": MessageLookupByLibrary.simpleMessage("WebDAV設定"),
     "whitelistMode": MessageLookupByLibrary.simpleMessage("ホワイトリストモード"),
-    "yearsAgo": m100,
+    "yearsAgo": m103,
     "zh_CN": MessageLookupByLibrary.simpleMessage("簡体字中国語"),
   };
 }

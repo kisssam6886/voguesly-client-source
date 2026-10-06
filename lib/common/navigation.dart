@@ -52,7 +52,7 @@ class Navigation {
       // 2026-09-18 Sam:客服好重要(用户反馈入口),升做一级 tab —— 安卓底栏第 5 位、桌面侧栏「在线客服」。
       // 打开嘅就係现有 VogueslyCsPanel(webview),唔另写页。
       // [0.9.84] keep:true 只系保住个页壳;WebView 本身几时销毁由 csAliveProvider 管
-      //(桌面切走保活 15 分钟;手机切走即销毁,唔长驻后台),见 voguesly_cs.dart _CsKeepAliveHost。
+      //(切走保活 15 分钟;0.9.98 起手机都保活,之前手机切走即销毁),见 voguesly_cs.dart _CsKeepAliveHost。
       NavigationItem(
         // [0.9.83] 客服:绿色「在线」小点喺侧栏 / 底栏渲染时加(NavigationItem.icon 只收 Icon)
         icon: const Icon(Icons.support_agent_rounded),

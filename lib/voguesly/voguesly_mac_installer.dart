@@ -128,9 +128,17 @@ class MacInstaller {
           MacInstallState(stage: MacInstallStage.relaunching, format: format),
         );
         // 先排定重开(独立 shell,唔跟本进程一齐死),再走正常退出(停核心/TUN/托盘)。
+        // [0.9.98] 旧写法「sleep 2; open -n」:handleExit 最长要 3 秒,2 秒时旧进程仲喺度,
+        //   `-n` 强制再开一个实例 ⇒ Dock 多一个图标(钉住嗰个变咗冇运行,新版占另一格;Sam 多次见到「两个 Voguesly」),
+        //   两个核心亦会短暂争端口。改为等旧进程真正退出(最多 20 秒)先用普通 open 开。
         await Process.start(
           '/bin/sh',
-          ['-c', 'sleep 2; /usr/bin/open -n "\$0"', target],
+          [
+            '-c',
+            r'i=0; while kill -0 "$1" 2>/dev/null && [ "$i" -lt 100 ]; do sleep 0.2; i=$((i+1)); done; sleep 0.3; /usr/bin/open "$0"',
+            target,
+            '$pid',
+          ],
           mode: ProcessStartMode.detached,
           runInShell: false,
         );

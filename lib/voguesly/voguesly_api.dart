@@ -1,3 +1,4 @@
+import 'dart:convert' show jsonDecode;
 import 'dart:typed_data';
 import 'package:fl_clash/common/app_localizations.dart';
 import 'package:fl_clash/common/print.dart' show commonPrint, redactSecrets;
@@ -606,16 +607,19 @@ class VogueslyApi {
   /// 下单(POST /user/order/save)。body{plan_id, period}。
   /// 成功返 trade_no(字符串);失败返 (null, 错误文案)。
   /// idempotent=false:已发出唔轮镜像重发,免重复下单。
+  /// [confirmReplace] [0.9.98] 服务端(09-22 起)要有生效订阅嘅人买一次性套餐时带 confirm_replace=1;
+  ///   之前客户端冇呢个参数 ⇒ 只 toast「…确认要继续购买吗?」冇掣按 = 死路(10-03 一位验证包用户连撳 8 次后流失)。
   Future<({String? tradeNo, String? error})> createOrder(
     String token, {
     required int planId,
     required String period,
+    bool confirmReplace = false,
   }) async {
     try {
       final resp = await _try(
         '/user/order/save',
         method: 'POST',
-        data: {'plan_id': planId, 'period': period},
+        data: {'plan_id': planId, 'period': period, if (confirmReplace) 'confirm_replace': 1},
         headers: {'Authorization': token},
         idempotent: false,
       );
@@ -1290,6 +1294,7 @@ class VogueslyPlan {
     required this.speedLimit,
     required this.content,
     required this.periods,
+    this.tags = const [],
   });
 
   final int id;
@@ -1298,6 +1303,23 @@ class VogueslyPlan {
   final int? speedLimit; // 限速(Mbps);null=不限
   final String? content; // 套餐描述(HTML/纯文,可能为空)
   final List<VogueslyPlanPeriod> periods;
+  /// [0.9.98] 后台 v2_plan.tags(例「推荐」「新」「专线」「一次性」);之前冇解析 ⇒ 卡片冇显示。
+  final List<String> tags;
+
+  /// XBoard 返数组;个别版本 / 旧数据係 JSON 字串。最多 4 个,去空白。
+  @visibleForTesting
+  static List<String> parseTags(Object? v) {
+    Object? d = v;
+    if (v is String && v.trim().startsWith('[')) {
+      try {
+        d = jsonDecode(v);
+      } catch (_) {
+        return const [];
+      }
+    }
+    if (d is! List) return const [];
+    return d.map((e) => '$e'.trim()).where((e) => e.isNotEmpty).take(4).toList();
+  }
 
   int get minPriceCents =>
       periods.map((e) => e.priceCents).reduce((a, b) => a < b ? a : b);
@@ -1358,6 +1380,7 @@ class VogueslyPlan {
           : (speed is num ? speed.toInt() : int.tryParse('$speed')),
       content: j['content']?.toString(),
       periods: periods,
+      tags: parseTags(j['tags']),
     );
   }
 }

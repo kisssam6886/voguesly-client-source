@@ -131,24 +131,38 @@ class _GlobalModeBanner extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: _amber.withValues(alpha: 0.55)),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+      // [0.9.98] 之前「图标 + 文字 + 掣」同一行:窄屏时掣食咗宽度,文字挤成一条窄柱(Sam 10-05 安卓截图)。
+      //   改为文字整行、掣放下面靠右。
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Icon(Icons.warning_amber_rounded, color: _amber, size: 20),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              text,
-              style: context.textTheme.bodySmall?.copyWith(
-                color: context.colorScheme.onSurface,
-                height: 1.4,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.only(top: 1),
+                child: Icon(Icons.warning_amber_rounded, color: _amber, size: 20),
               ),
-            ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  text,
+                  style: context.textTheme.bodySmall?.copyWith(
+                    color: context.colorScheme.onSurface,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          FilledButton.tonal(
-            onPressed: onSwitch,
-            child: Text(l.vgGlobalBannerSwitch),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton.tonal(
+              onPressed: onSwitch,
+              style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
+              child: Text(l.vgGlobalBannerSwitch),
+            ),
           ),
         ],
       ),

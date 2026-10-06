@@ -26,6 +26,40 @@ bool vogueslyPlanExpired(VogueslyUser? u) {
   return exp * 1000 < DateTime.now().millisecondsSinceEpoch;
 }
 
+/// [0.9.98] ¥3.9 验证包(plan 18,服务端 yl_commission_exclude_plan_ids 默认亦係 18)。
+/// 认 id 或者名(以后换 id 唔会漏)。
+bool vogueslyIsTrialPlan(VogueslyUser? u) {
+  if (u == null || u.planId == null) return false;
+  final name = u.planName ?? '';
+  return u.planId == 18 || name.contains('验证包') || name.contains('驗證包');
+}
+
+enum VogueslyTrialStage { none, low, used, expired }
+
+/// [0.9.98 Sam「验证包到期 / 用完要引导升级 Pro,唔好引导续 ¥3.9」]
+///   used = 流量剩 ≤ 50MB;expired = 到期;low = 用咗 ≥ 80% 或者剩 ≤ 1 日。
+@visibleForTesting
+VogueslyTrialStage vogueslyTrialStageAt(VogueslyUser? u, DateTime now) {
+  if (!vogueslyIsTrialPlan(u)) return VogueslyTrialStage.none;
+  final exp = u!.expiredAt;
+  if (exp != null && exp > 0 && exp * 1000 < now.millisecondsSinceEpoch) {
+    return VogueslyTrialStage.expired;
+  }
+  final total = u.transferEnable;
+  final left = total - u.upload - u.download;
+  if (total > 0 && left <= 50 * 1024 * 1024) return VogueslyTrialStage.used;
+  final lowTraffic = total > 0 && left <= total * 0.2;
+  final lowTime = exp != null && exp > 0 && exp * 1000 - now.millisecondsSinceEpoch <= 86400000;
+  return (lowTraffic || lowTime) ? VogueslyTrialStage.low : VogueslyTrialStage.none;
+}
+
+VogueslyTrialStage vogueslyTrialStage(VogueslyUser? u) => vogueslyTrialStageAt(u, DateTime.now());
+
+String _gbLeft(VogueslyUser u) {
+  final left = (u.transferEnable - u.upload - u.download).clamp(0, 1 << 62);
+  return '${(left / 1073741824).toStringAsFixed(1)} GB';
+}
+
 /// 跳去 app 内「购买套餐」tab(¥3.9 验证包同正式套餐都喺度,支付全程 app 内完成)。
 void vogueslyGoToShop() {
   final c = globalState.container;
@@ -40,7 +74,9 @@ bool vogueslyGuideIfNoPlan([BuildContext? context]) {
   final ctx = context ?? globalState.navigatorKey.currentContext;
   if (ctx == null || !ctx.mounted) return false;
   if (vogueslyPlanExpired(user)) {
-    globalState.showNotifier(currentAppLocalizations.vgPlanExpiredBanner);
+    globalState.showNotifier(vogueslyIsTrialPlan(user)
+        ? currentAppLocalizations.vgTrialExpiredBanner
+        : currentAppLocalizations.vgPlanExpiredBanner);
     vogueslyGoToShop();
   } else {
     showVogueslyOnboarding(ctx);
@@ -55,12 +91,23 @@ class VogueslyNoPlanBanner extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(vogueslyAuthProvider.select((s) => s.user));
-    if (!vogueslyUserLacksPlan(user)) return const SizedBox.shrink();
+    // [0.9.98] 验证包:快用完 / 用完 / 到期 ⇒ 引导升级正式套餐(唔引导再买 ¥3.9;流量用完但未到期以前完全冇提示)
+    final trial = vogueslyTrialStage(user);
+    if (!vogueslyUserLacksPlan(user) && trial == VogueslyTrialStage.none) {
+      return const SizedBox.shrink();
+    }
     final expired = vogueslyPlanExpired(user);
     final importing = ref.watch(vogueslyImportingProvider);
     if (importing) return const SizedBox.shrink();
     final cs = context.colorScheme;
     final l = currentAppLocalizations;
+    final isTrial = trial != VogueslyTrialStage.none;
+    final text = switch (trial) {
+      VogueslyTrialStage.expired => l.vgTrialExpiredBanner,
+      VogueslyTrialStage.used => l.vgTrialEndedBanner,
+      VogueslyTrialStage.low => l.vgTrialLowBanner(_gbLeft(user!)),
+      VogueslyTrialStage.none => expired ? l.vgPlanExpiredBanner : l.vgNoPlanBanner,
+    };
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Material(
@@ -82,7 +129,7 @@ class VogueslyNoPlanBanner extends ConsumerWidget {
                   const SizedBox(width: 10),
                   Flexible(
                     child: Text(
-                      expired ? l.vgPlanExpiredBanner : l.vgNoPlanBanner,
+                      text,
                       style: context.textTheme.bodyMedium?.copyWith(
                         color: cs.onTertiaryContainer,
                         fontWeight: FontWeight.w600,
@@ -94,7 +141,7 @@ class VogueslyNoPlanBanner extends ConsumerWidget {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (!expired)
+                  if (!expired && !isTrial)
                     TextButton(
                       onPressed: () => showVogueslyOnboarding(context),
                       style: TextButton.styleFrom(
@@ -105,7 +152,9 @@ class VogueslyNoPlanBanner extends ConsumerWidget {
                     onPressed: vogueslyGoToShop,
                     style: FilledButton.styleFrom(
                         visualDensity: VisualDensity.compact),
-                    child: Text(expired ? l.vgRenewNow : Intl.message('shop')),
+                    child: Text(isTrial
+                        ? l.vgUpgradePlan
+                        : (expired ? l.vgRenewNow : Intl.message('shop'))),
                   ),
                 ],
               ),

@@ -19,6 +19,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../voguesly/voguesly_apk_installer.dart';
 import '../voguesly/voguesly_auth.dart';
+import '../voguesly/voguesly_conn_prefs.dart';
 import '../voguesly/voguesly_mac_installer.dart';
 import '../voguesly/voguesly_remote_config.dart' show vogueslyDownloadPageUrl;
 import '../voguesly/voguesly_win_installer.dart';
@@ -240,6 +241,7 @@ class SetupAction extends _$SetupAction {
   // 仅桌面;Android 唔行呢套(有自己嘅 VpnService 生命周期 + 流量成本考虑)。
   Timer? _desktopKeepaliveTimer;
   bool _desktopKeepaliveInFlight = false;
+  final Set<String> _macOtherVpnNotified = {};
   int _desktopKeepaliveFailStreak = 0;
 
   bool get isStart => startTime != null && startTime!.isBeforeNow;
@@ -391,8 +393,10 @@ class SetupAction extends _$SetupAction {
     }
     _desktopTunVerifyInFlight = true;
     late final bool ok;
+    var userWantsSystemProxy = false;
     try {
       ok = await system.verifyDesktopTunTransport();
+      userWantsSystemProxy = await vogueslyUserWantsSystemProxy();
     } finally {
       _desktopTunVerifyInFlight = false;
     }
@@ -419,8 +423,12 @@ class SetupAction extends _$SetupAction {
       // [0.9.97] 只关**一次**(每次连接第一次确认接管),或者收返兜底自动开嘅。
       //    旧版每次校验(几秒一次)都关 ⇒ 用户喺设定开咗系统代理,几秒后又被关返,
       //    以为坏咗、反复切换(工单 #29)。用户自己开 = 佢嘅选择,保留。
-      final shouldTurnOff =
-          !_systemProxyAutoOffDone || _systemProxyEnabledByFallback;
+      // [0.9.98] 系统代理变成正式开关:用户亲手开咗(记喺 vogueslyRememberUserSystemProxy)就唔关。
+      final shouldTurnOff = vogueslyShouldAutoOffSystemProxy(
+        autoOffDone: _systemProxyAutoOffDone,
+        enabledByFallback: _systemProxyEnabledByFallback,
+        userWants: userWantsSystemProxy,
+      );
       _systemProxyAutoOffDone = true;
       if (shouldTurnOff && ref.read(networkSettingProvider).systemProxy) {
         _systemProxyEnabledByFallback = false;
@@ -599,6 +607,24 @@ class SetupAction extends _$SetupAction {
     );
   }
 
+  /// [0.9.98] Mac:连住易联之后用户再开小火箭 / Surge 呢类系统 VPN ⇒ 流量可能被佢接管
+  ///   (10-02 Sam Mac 实例:cleanip 见到小火箭出口,佢冇察觉)。连接前嘅 macForeignTunOwner 只喺未连接时有效,
+  ///   呢度连接期间每轮保活顺手查 `scutil --nc list`(约 10ms);同一个 VPN 每次运行只提示一次。
+  Future<void> _checkMacOtherVpnWhileConnected() async {
+    try {
+      final out = (await Process.run('/usr/sbin/scutil', ['--nc', 'list'])).stdout.toString();
+      final fresh = macConnectedVpnNames(out).where((n) => !_macOtherVpnNotified.contains(n)).toList();
+      if (fresh.isEmpty || startTime == null) return;
+      _macOtherVpnNotified.addAll(fresh);
+      unawaited(globalState.showMessage(
+        title: currentAppLocalizations.vgOtherVpnActiveTitle,
+        message: TextSpan(text: currentAppLocalizations.vgOtherVpnWhileConnected(fresh.join('、'))),
+        confirmText: currentAppLocalizations.vgGotIt,
+        cancelable: false,
+      ));
+    } catch (_) {}
+  }
+
   Future<void> _desktopKeepaliveTick() async {
     if (!system.isDesktop || startTime == null) return;
     if (_desktopKeepaliveInFlight) return;
@@ -608,6 +634,7 @@ class SetupAction extends _$SetupAction {
         DateTime.now().difference(startedAt) < const Duration(seconds: 20)) {
       return;
     }
+    if (system.isMacOS) unawaited(_checkMacOtherVpnWhileConnected());
     final port = ref.read(patchClashConfigProvider).mixedPort;
     if (port <= 0) return;
 
@@ -1162,6 +1189,59 @@ class SetupAction extends _$SetupAction {
     _desktopTunProvenBroken = false;
   }
 
+  /// [0.9.98] 连接方式两个开关嘅唯一写入口:快捷设置、网络页、仪表盘小卡、托盘、快捷键全部经呢度,
+  /// 规则一致(审计-0.9.98-检测页美化与连接方式 §一)。返回 false = 被拦(已提示),调用方唔使再做嘢。
+  ///
+  /// 「仲有冇另一条通路」用**实际**状态判:已连接时睇 realTunEnable —— TUN 失败退咗系统代理嘅话
+  /// 设定值仍然係 true,用设定值判会放行「两个都关」,用户即刻断网。
+  bool _enhancedNow() {
+    final connected = ref.read(runTimeProvider) != null;
+    return connected
+        ? ref.read(realTunEnableProvider)
+        : ref.read(patchClashConfigProvider).tun.enable;
+  }
+
+  bool setEnhancedByUser(bool on) {
+    if (!on) {
+      if (!vogueslyHasTransport(
+        enhanced: false,
+        systemProxy: ref.read(networkSettingProvider).systemProxy,
+      )) {
+        globalState.showNotifier(currentAppLocalizations.vgConnModeNeedOne);
+        return false;
+      }
+      ref
+          .read(patchClashConfigProvider.notifier)
+          .update((state) => state.copyWith.tun(enable: false));
+      return true;
+    }
+    // 系统代理唔喺呢度关:0.9.86 定案 —— TUN 确认接管到先由 _verifyDesktopTunConnected 关,
+    // 否则 TUN 起唔到嗰三十几秒用户会「显示已连接但上唔到网」。
+    resetTunSessionFlags();
+    final already = ref.read(patchClashConfigProvider).tun.enable;
+    ref
+        .read(patchClashConfigProvider.notifier)
+        .update((state) => state.copyWith.tun(enable: true));
+    // [0.9.88] 设定值本来已经係 true(TUN 失败后自动用紧系统代理)⇒ 上面嘅 update 冇变化、唔会重新下发,手动重试一次。
+    if (already) updateConfigDebounce();
+    return true;
+  }
+
+  bool setSystemProxyByUser(bool on) {
+    if (!on && !vogueslyHasTransport(enhanced: _enhancedNow(), systemProxy: false)) {
+      globalState.showNotifier(currentAppLocalizations.vgConnModeNeedOne);
+      return false;
+    }
+    // 用户亲手揀 ⇒ 唔再当兜底;开咗本次连接亦唔会再被自动关。
+    _systemProxyEnabledByFallback = false;
+    if (on) _systemProxyAutoOffDone = true;
+    unawaited(vogueslyRememberUserSystemProxy(on));
+    ref
+        .read(networkSettingProvider.notifier)
+        .update((state) => state.copyWith(systemProxy: on));
+    return true;
+  }
+
   /// TUN 授权失败时弹框问用户要唔要重新授权。由 `_requestAdmin` 喺
   /// `AuthorizeCode.error` 分支调用(见下面 ~993 行)。
   ///
@@ -1456,16 +1536,17 @@ class SystemAction extends _$SystemAction {
     }
   }
 
+  // [0.9.98] 托盘 / 快捷键都经 SetupAction 嘅统一入口(唔准两个都关、记低用户亲手开嘅系统代理)。
   void updateTun() {
     ref
-        .read(patchClashConfigProvider.notifier)
-        .update((state) => state.copyWith.tun(enable: !state.tun.enable));
+        .read(setupActionProvider.notifier)
+        .setEnhancedByUser(!ref.read(patchClashConfigProvider).tun.enable);
   }
 
   void updateSystemProxy() {
     ref
-        .read(networkSettingProvider.notifier)
-        .update((state) => state.copyWith(systemProxy: !state.systemProxy));
+        .read(setupActionProvider.notifier)
+        .setSystemProxyByUser(!ref.read(networkSettingProvider).systemProxy);
   }
 
   void updateAutoLaunch() {

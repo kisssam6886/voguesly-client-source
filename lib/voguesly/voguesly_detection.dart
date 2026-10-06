@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:fl_clash/common/app_localizations.dart';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
@@ -15,7 +16,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// 显式经核心 mixed-port 代理(127.0.0.1:port)探测,绕开有已知问题嘅 _clashDio。
 /// 测的是出口节点解锁 + IP 分流,唔系本机。
 
-enum UnlockStatus { yes, no, loading, error }
+/// [0.9.98] idle = 易联未连接:唔跑解锁检测(直连大陆必然 No,之前满屏红色吓人),连上后自动检测。
+/// na = 预期唔解锁(例:B站港澳台 —— B站规则走国内直连,冇港澳台线路),显示灰色「不适用」唔好用红色。
+enum UnlockStatus { yes, no, loading, error, idle, na }
 
 class UnlockResult {
   final String name;
@@ -74,7 +77,8 @@ const _ua =
 
 class DetectionService {
   final Dio _dio;
-  DetectionService(int mixedPort) : _dio = _makeDio(mixedPort);
+  final int _port;
+  DetectionService(int mixedPort) : _port = mixedPort, _dio = _makeDio(mixedPort);
 
   static Dio _makeDio(int port) {
     final dio = Dio(BaseOptions(
@@ -118,6 +122,11 @@ class DetectionService {
   /// 国际虚高 5-8 倍(误导)。改预热取 min:先打一次暖连接(丢弃),再打 2 次取最小,
   /// dio keep-alive 复用同 host 连接省握手 → 接近真实稳态 RTT。
   Future<int?> ping(String url) async {
+    // [0.9.98] 先量「同一条连接」嘅往返(同 curl 复用连接一样);失败先退返旧做法。
+    if (_port > 0 && url.startsWith('https://')) {
+      final warm = await vogueslyWarmRtt(_port, url);
+      if (warm != null) return warm;
+    }
     Future<int?> once() async {
       final sw = Stopwatch()..start();
       try {
@@ -348,7 +357,12 @@ class DetectionService {
   // 港澳台专属 ep_id=183799:香港 code:0(能睇!)、大陆/美国 -10403 → 真·港澳台区解锁。
   //   (⚠️268176 系台湾专属,香港都 -10403,唔啱做港澳台检测)。
   Future<UnlockResult> biliMainland() => _bili(currentAppLocalizations.vgBiliMainland, '307247');
-  Future<UnlockResult> biliHkMoTw() => _bili(currentAppLocalizations.vgBiliHkMoTw, '183799');
+  // [0.9.98] 港澳台 No 係预期结果(Sam 10-01 截图:红色 No 吓人)⇒ 改灰色「不适用」。真係解锁到(Yes)照显示。
+  Future<UnlockResult> biliHkMoTw() async {
+    final r = await _bili(currentAppLocalizations.vgBiliHkMoTw, '183799');
+    if (r.status != UnlockStatus.no) return r;
+    return UnlockResult(r.name, status: UnlockStatus.na, note: currentAppLocalizations.vgBiliHkNaNote);
+  }
 
   List<Future<UnlockResult> Function()> get all => [
     youtubePremium,
@@ -574,6 +588,8 @@ class _VogueslyDetectionViewState extends ConsumerState<VogueslyDetectionView> {
     );
     final svc = DetectionService(mixedPort);
     final checks = svc.all;
+    // [0.9.98] 未连接:解锁检测唔跑(经大陆直连必然 No),卡片显示灰色「连接后检测」;连上后由 build 入面嘅 listen 自动重跑。
+    final connected = ref.read(proxyStateProvider).isStart;
     setState(() {
       _running = true;
       _ipLoading = true;
@@ -582,7 +598,7 @@ class _VogueslyDetectionViewState extends ConsumerState<VogueslyDetectionView> {
         // 防御:将来 all/_names 数量失配唔会 RangeError 崩检测页。
         (i) => UnlockResult(
           i < _names.length ? _names[i] : currentAppLocalizations.vgCheckItem,
-          status: UnlockStatus.loading,
+          status: connected ? UnlockStatus.loading : UnlockStatus.idle,
         ),
       );
     });
@@ -607,7 +623,9 @@ class _VogueslyDetectionViewState extends ConsumerState<VogueslyDetectionView> {
         });
       }
     }
-    await Future.wait([for (var w = 0; w < maxConcurrent; w++) worker()]);
+    if (connected) {
+      await Future.wait([for (var w = 0; w < maxConcurrent; w++) worker()]);
+    }
     // 分流可视化 + 延时:检测完先跑(唔同解锁检测抢代理),避免挤爆。
     final split = await svc.splitTest();
     if (mounted) setState(() => _split = split);
@@ -652,6 +670,14 @@ class _VogueslyDetectionViewState extends ConsumerState<VogueslyDetectionView> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    // [0.9.98] 连上之后自动重跑(未连接时解锁卡显示「连接后检测」);等 3 秒畀核心起好先测。
+    ref.listen<bool>(proxyStateProvider.select((s) => s.isStart), (prev, next) {
+      if (prev == false && next == true) {
+        Future.delayed(const Duration(seconds: 3), () {
+          if (mounted) _runAll();
+        });
+      }
+    });
     return Scaffold(
       appBar: AppBar(
         title: Text(currentAppLocalizations.vgCheck),
@@ -715,13 +741,14 @@ class _VogueslyDetectionViewState extends ConsumerState<VogueslyDetectionView> {
             LayoutBuilder(builder: (_, c) {
               // 手机 2 列起步(600 上 3、900 上 4),卡片紧凑,唔再单列占满版面(Sam 反馈)。
               final cols = c.maxWidth > 900 ? 4 : (c.maxWidth > 600 ? 3 : 2);
-              // 2 列窄卡:名 + 徽章约需 aspectRatio 1.7(卡高≈卡宽/1.7);列越多卡越窄要更高。
-              final ratio = cols >= 4 ? 2.1 : (cols == 3 ? 1.9 : 1.7);
-              return GridView.count(
-                crossAxisCount: cols,
-                childAspectRatio: ratio,
-                mainAxisSpacing: 10,
-                crossAxisSpacing: 10,
+              // [0.9.98] 卡高固定 64(图标 36 + 名 + 结果粒),唔再跟宽度按比例拉高(之前大片空白)。
+              return GridView(
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: cols,
+                  mainAxisExtent: 64,
+                  mainAxisSpacing: 10,
+                  crossAxisSpacing: 10,
+                ),
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 children: _results
@@ -978,6 +1005,8 @@ class _SplitCard extends StatelessWidget {
           Icon(ok ? Icons.check_circle : Icons.error_outline,
               size: 16, color: okColor),
           const SizedBox(width: 8),
+          VogueslyServiceIcon(name: s.name, size: 20),
+          const SizedBox(width: 8),
           Text(s.name,
               style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5)),
           const SizedBox(width: 6),
@@ -1066,6 +1095,8 @@ class _LatencyGroup extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(vertical: 5),
                     child: Row(
                       children: [
+                        VogueslyServiceIcon(name: r.name, size: 20),
+                        const SizedBox(width: 10),
                         Expanded(child: Text(r.name, style: tt.bodyMedium)),
                         Container(
                           width: 8,
@@ -1098,70 +1129,192 @@ class _UnlockCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final loading = result.status == UnlockStatus.loading;
     final ok = result.status == UnlockStatus.yes;
-    final errored = result.status == UnlockStatus.error;
+    final idle = result.status == UnlockStatus.idle;
+    final na = result.status == UnlockStatus.na;
+    final errored = result.status == UnlockStatus.error || idle;
     final color = loading
         ? cs.outline
-        : errored
-            ? cs.outline // 检测失败=中性灰,唔当解锁失败(红)
+        : (errored || na)
+            ? cs.outline // 检测失败 / 未连接 / 不适用 = 中性灰,唔当解锁失败(红)
             : (ok ? const Color(0xFF16A34A) : const Color(0xFFDC2626));
+    final label = idle
+        ? currentAppLocalizations.vgUnlockAfterConnect
+        : na
+        ? currentAppLocalizations.vgNotApplicable
+        : (errored ? currentAppLocalizations.vgCheckFailed : (ok ? 'Yes' : 'No'));
+    final icon = idle
+        ? Icons.link_off
+        : na
+        ? Icons.remove_circle_outline
+        : errored
+        ? Icons.help_outline
+        : (ok ? Icons.check_circle : Icons.cancel);
+    // [0.9.98] 紧凑卡:左边官方图标 36,右边「名」+「结果粒 · 国旗 · 备注」两行。
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
       decoration: BoxDecoration(
         color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         border: Border(left: BorderSide(color: color, width: 4)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Row(
         children: [
-          Text(result.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.titleSmall
-                  ?.copyWith(fontWeight: FontWeight.w700)),
-          Row(
-            children: [
-              if (loading)
-                const SizedBox(
-                    width: 16, height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2))
-              else
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(
-                        errored
-                            ? Icons.help_outline
-                            : (ok ? Icons.check_circle : Icons.cancel),
-                        size: 14, color: color),
-                    const SizedBox(width: 4),
-                    Text(errored ? currentAppLocalizations.vgCheckFailed : (ok ? 'Yes' : 'No'),
-                        style: TextStyle(
-                            color: color, fontWeight: FontWeight.w700, fontSize: 12)),
-                  ]),
-                ),
-              const SizedBox(width: 8),
-              if (result.region.isNotEmpty)
-                Text('${countryCodeToEmoji(result.region)} ${result.region}',
-                    // 国旗走内置 Twemoji 字体,免 Windows 上退化成 "US" 字母。
-                    style: const TextStyle(fontSize: 12, fontFamily: 'Twemoji')),
-              if (result.note.isNotEmpty) ...[
-                const SizedBox(width: 6),
-                Flexible(
-                  child: Text(result.note,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+          VogueslyServiceIcon(name: result.name, size: 36),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(result.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w700, height: 1.2)),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    if (loading)
+                      const SizedBox(
+                          width: 14, height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                    else
+                      // 手机两列卡只有约 100px 宽:结果粒、国旗、备注全部可以收窄(10-06 出图见过溢出 7px)。
+                      Flexible(
+                        flex: 0,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: color.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Row(mainAxisSize: MainAxisSize.min, children: [
+                            Icon(icon, size: 13, color: color),
+                            const SizedBox(width: 3),
+                            Flexible(
+                              child: Text(label,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      color: color, fontWeight: FontWeight.w700, fontSize: 11.5)),
+                            ),
+                          ]),
+                        ),
+                      ),
+                    if (result.region.isNotEmpty) ...[
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text('${countryCodeToEmoji(result.region)} ${result.region}',
+                            maxLines: 1,
+                            overflow: TextOverflow.clip,
+                            softWrap: false,
+                            // 国旗走内置 Twemoji 字体,免 Windows 上退化成 "US" 字母。
+                            style: const TextStyle(fontSize: 11.5, fontFamily: 'Twemoji')),
+                      ),
+                    ],
+                    if (result.note.isNotEmpty) ...[
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(result.note,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+                      ),
+                    ],
+                  ],
                 ),
               ],
-            ],
+            ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// [0.9.98] 只畀离线出图(test/golden)用:三款卡直接用假数据画出嚟睇排版,唔使真跑探测。
+@visibleForTesting
+Widget vogueslyDetectionCardsPreview({
+  required List<UnlockResult> unlock,
+  required List<LatencyResult> domestic,
+  required List<LatencyResult> intl,
+  required List<SplitRouteResult> split,
+  int cols = 2,
+}) {
+  return Builder(builder: (context) {
+    final cs = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        GridView(
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: cols,
+            mainAxisExtent: 64,
+            mainAxisSpacing: 10,
+            crossAxisSpacing: 10,
+          ),
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          children: unlock.map((r) => _UnlockCard(result: r)).toList(),
+        ),
+        const SizedBox(height: 16),
+        _LatencyGroup(title: currentAppLocalizations.vgDomestic, accent: const Color(0xFF16A34A), results: domestic),
+        const SizedBox(height: 12),
+        _LatencyGroup(title: currentAppLocalizations.vgInternational, accent: const Color(0xFFF59E0B), results: intl),
+        const SizedBox(height: 12),
+        _SplitCard(items: split, cs: cs),
+      ],
+    );
+  });
+}
+
+/// [0.9.98] 检测页官方图标:打包喺 assets/images/services/(64px,合共约 70KB),**唔好运行时去网上拉**
+/// —— 断网时检测页正正最需要显示。来源:App Store 官方 App 图标(开发商名核过);Cloudflare / jsDelivr /
+/// 淘宝用官网 favicon(淘宝 App 图标係节日版)。认唔到嘅(例「普通网站」)用通用地球图标。
+@visibleForTesting
+String? vogueslyServiceIconAsset(String name) {
+  final l = currentAppLocalizations;
+  final key = switch (name) {
+    'YouTube Premium' || 'YouTube' => 'youtube',
+    'Netflix' => 'netflix',
+    'Disney+' => 'disneyplus',
+    'ChatGPT' => 'chatgpt',
+    'Claude' => 'claude',
+    'Spotify' => 'spotify',
+    'TikTok' => 'tiktok',
+    'Cloudflare' => 'cloudflare',
+    'Google' => 'google',
+    'jsDelivr' => 'jsdelivr',
+    _ when name == l.vgBiliMainland || name == l.vgBiliHkMoTw || name == l.vgBilibili => 'bilibili',
+    _ when name == l.vgBaidu => 'baidu',
+    _ when name == l.vgTaobao => 'taobao',
+    _ when name == l.vgWeChat => 'wechat',
+    _ when name == l.vgDouyin => 'douyin',
+    _ => null,
+  };
+  return key == null ? null : 'assets/images/services/$key.png';
+}
+
+class VogueslyServiceIcon extends StatelessWidget {
+  final String name;
+  final double size;
+  const VogueslyServiceIcon({super.key, required this.name, required this.size});
+
+  @override
+  Widget build(BuildContext context) {
+    final asset = vogueslyServiceIconAsset(name);
+    final cs = Theme.of(context).colorScheme;
+    if (asset == null) {
+      return Icon(Icons.public, size: size, color: cs.onSurfaceVariant);
+    }
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(size * 0.22),
+      child: Image.asset(
+        asset,
+        width: size,
+        height: size,
+        filterQuality: FilterQuality.medium,
+        errorBuilder: (_, _, _) => Icon(Icons.public, size: size, color: cs.onSurfaceVariant),
       ),
     );
   }
@@ -1210,4 +1363,73 @@ class _IpCard extends StatelessWidget {
           Text(v, style: const TextStyle(fontWeight: FontWeight.w700)),
         ],
       );
+}
+
+/// [0.9.98] 「国际延迟永远 800–1100ms 红色」根因(10-06 本机实测,东京中转→纽约 Verizon):
+///   Dart HttpClient 经 HTTP 代理访问 HTTPS **唔复用连接**,每次都重开 CONNECT 隧道 + TLS(≈4 个往返),
+///   预热冇用 ⇒ 永远量到冷握手 ~1070ms;同一时间 curl 喺同一条连接上第 2、3 次只要 255–267ms。
+///   而家自己经本地代理开一条 TLS 隧道,连发 HEAD,取第 2 次之后最小值 = 暖连接往返(实测 248–261ms)。
+///   仍经内核 mixed 端口 ⇒ 分流规则照样生效。任何失败返 null,由调用方退返旧做法。
+Future<int?> vogueslyWarmRtt(int proxyPort, String url,
+    {int samples = 3, Duration timeout = const Duration(seconds: 8)}) async {
+  final u = Uri.parse(url);
+  final host = u.host;
+  final port = u.hasPort ? u.port : 443;
+  final path = (u.path.isEmpty ? '/' : u.path) + (u.hasQuery ? '?${u.query}' : '');
+  Socket? raw;
+  SecureSocket? tls;
+  try {
+    raw = await Socket.connect('127.0.0.1', proxyPort, timeout: timeout);
+    if (!await _vgConnectTunnel(raw, host, port, timeout)) return null;
+    tls = await SecureSocket.secure(raw, host: host, onBadCertificate: (_) => true)
+        .timeout(timeout);
+    final it = StreamIterator<Uint8List>(tls);
+    final buf = <int>[];
+    int? best;
+    for (var i = 0; i < samples; i++) {
+      final sw = Stopwatch()..start();
+      tls.add(utf8.encode('HEAD $path HTTP/1.1\r\nHost: $host\r\nUser-Agent: Mozilla/5.0\r\n'
+          'Accept: */*\r\nConnection: keep-alive\r\n\r\n'));
+      await tls.flush();
+      while (true) {
+        final end = latin1.decode(buf, allowInvalid: true).indexOf('\r\n\r\n');
+        if (end >= 0) {
+          buf.removeRange(0, end + 4);
+          break;
+        }
+        if (!await it.moveNext().timeout(timeout)) return best;
+        buf.addAll(it.current);
+      }
+      final t = sw.elapsedMilliseconds;
+      if (i > 0 && (best == null || t < best)) best = t; // 第 1 次唔计
+    }
+    await it.cancel();
+    return best;
+  } catch (_) {
+    return null;
+  } finally {
+    tls?.destroy();
+    raw?.destroy();
+  }
+}
+
+/// 发 CONNECT,读到第一个空行即判 200;之后暂停订阅交俾 SecureSocket.secure 接手。
+Future<bool> _vgConnectTunnel(Socket s, String host, int port, Duration timeout) async {
+  final done = Completer<bool>();
+  final buf = <int>[];
+  late StreamSubscription<Uint8List> sub;
+  sub = s.listen((d) {
+    buf.addAll(d);
+    final txt = latin1.decode(buf, allowInvalid: true);
+    if (txt.contains('\r\n\r\n') && !done.isCompleted) {
+      sub.pause();
+      done.complete(RegExp(r'^HTTP/1\.[01] 200').hasMatch(txt));
+    }
+  }, onError: (_) {
+    if (!done.isCompleted) done.complete(false);
+  }, onDone: () {
+    if (!done.isCompleted) done.complete(false);
+  });
+  s.write('CONNECT $host:$port HTTP/1.1\r\nHost: $host:$port\r\n\r\n');
+  return done.future.timeout(timeout, onTimeout: () => false);
 }

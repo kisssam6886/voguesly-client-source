@@ -47,6 +47,26 @@ class AboutView extends StatelessWidget {
           ),
           trailing: const Icon(Icons.launch),
         ),
+        // [0.9.98] GPL-3.0 合规:注明上游(FlClash / mihomo)+ 源代码入口(每个发布版喺 voguesly-client-source 有对应 tag)
+        ListItem(
+          title: Text(currentAppLocalizations.vgOpenSource),
+          subtitle: Text(currentAppLocalizations.vgOpenSourceDesc),
+          onTap: () => launchUrl(
+            Uri.parse('https://github.com/kisssam6886/voguesly-client-source'),
+            mode: LaunchMode.externalApplication,
+          ),
+          trailing: const Icon(Icons.launch),
+        ),
+        // [0.9.98] 第三方组件授权声明(Flutter 自动汇总所有依赖包嘅 LICENSE)
+        ListItem(
+          title: Text(currentAppLocalizations.vgThirdPartyLicenses),
+          onTap: () => showLicensePage(
+            context: context,
+            applicationName: appName,
+            applicationVersion: globalState.packageInfo.version,
+          ),
+          trailing: const Icon(Icons.chevron_right),
+        ),
       ],
     );
   }

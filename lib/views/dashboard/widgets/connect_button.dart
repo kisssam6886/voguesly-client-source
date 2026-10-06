@@ -251,10 +251,14 @@ class _ConnectButtonState extends ConsumerState<ConnectButton>
     // 旧实现塞成一行「已连接 · TUN + 系统代理」,喺 150 直径嘅圆入面必然溢出圆外
     // (Sam 2026-08-05 实测截图)。拆两行 + 下面 _CircleLabel 限宽 scaleDown,
     // 长短文案都唔会冲出圆边。
+    // [0.9.98] 两个开关可以同时开 ⇒「增强模式」/「增强模式 + 系统代理」/「系统代理」三种。
+    final systemProxyOn = ref.watch(networkSettingProvider.select((s) => s.systemProxy));
     final modeLabel = (isStart && !bypassed && system.isDesktop)
-        // [0.9.83] 唔再显示「TUN」工程字:TUN 接管全机 =「增强模式」;只开系统代理 =「兼容模式」
+        // [0.9.83] 唔再显示「TUN」工程字:TUN 接管全机 =「增强模式」
         ? (realTunEnable
-              ? currentAppLocalizations.vgConnModeEnhanced
+              ? (systemProxyOn
+                    ? currentAppLocalizations.vgConnModeBoth
+                    : currentAppLocalizations.vgConnModeEnhanced)
               : currentAppLocalizations.vgConnModeCompat)
         : null;
 

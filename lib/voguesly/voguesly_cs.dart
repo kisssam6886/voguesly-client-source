@@ -4,7 +4,7 @@ import 'package:fl_clash/common/app_localizations.dart';
 import 'package:fl_clash/common/print.dart' show commonPrint;
 import 'package:fl_clash/enum/enum.dart' show LogLevel, PageLabel;
 import 'package:fl_clash/providers/providers.dart'
-    show currentPageLabelProvider, isMobileViewProvider, navigationStateProvider;
+    show currentPageLabelProvider, navigationStateProvider;
 
 import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:fl_clash/widgets/scaffold.dart';
@@ -103,7 +103,8 @@ Future<void> _launchCsExternal(ProviderContainer container) async {
 class VogueslyCsPanel extends ConsumerStatefulWidget {
   const VogueslyCsPanel({super.key});
 
-  /// 开客服:Linux → 系统浏览器;手机 → 全页 push webview;桌面 macOS/Windows → 半框 overlay。
+  /// 开客服:Linux → 系统浏览器;有一级 tab「客服」(桌面侧栏 / 手机底栏)→ 切去嗰个 tab(保活嗰个 WebView);
+  /// 冇 tab 先退返旧做法:手机全页 push webview / 桌面半框 overlay。
   static void open(BuildContext context) {
     final container = ProviderScope.containerOf(context, listen: false);
     if (_csUseExternalBrowser) {
@@ -112,12 +113,6 @@ class VogueslyCsPanel extends ConsumerStatefulWidget {
     }
     final w = MediaQuery.maybeOf(context)?.size.width ?? 0;
     final isMobile = w > 0 && w < 640;
-    if (isMobile) {
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const VogueslyCsPanel()),
-      );
-      return;
-    }
     final overlay = container.read(contentOverlayProvider);
     final onSupportTab = overlay == ContentOverlay.none &&
         container.read(currentPageLabelProvider) == PageLabel.support;
@@ -134,8 +129,18 @@ class VogueslyCsPanel extends ConsumerStatefulWidget {
         .navigationItems
         .any((e) => e.label == PageLabel.support);
     if (hasSupportTab) {
+      // [0.9.98 Sam「切去其他地方再返客服会重新加载」] 手机「我的 → 联系客服」以前 push 一个新页 = 第二个 WebView,
+      //   每次都重新加载,而且同底栏「客服」唔係同一个画面。而家手机都切去底栏「客服」tab;
+      //   先收起叠喺上面嘅页(例如用户中心子页),否则 tab 切咗都俾佢遮住。
+      if (isMobile) Navigator.maybeOf(context)?.popUntil((r) => r.isFirst);
       container.read(contentOverlayProvider.notifier).close();
       container.read(currentPageLabelProvider.notifier).toPage(PageLabel.support);
+      return;
+    }
+    if (isMobile) {
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const VogueslyCsPanel()),
+      );
       return;
     }
     container.read(contentOverlayProvider.notifier).set(ContentOverlay.cs);
@@ -466,12 +471,17 @@ class VogueslySupportPage extends StatelessWidget {
   }
 }
 
-/// 一级 tab「在线客服」嘅 WebView 宿主:**桌面**切走 tab 时保活(唔 dispose),切返嚟唔再重新加载。
+/// 一级 tab「在线客服」嘅 WebView 宿主:切走 tab 时保活(唔 dispose),切返嚟唔再重新加载。
 ///
 /// 做法:tab 本身 keep:true(PageView 保住个壳,见 navigation.dart),WebView 几时真正销毁由
 /// csAliveProvider 决定(关闭 / 隐藏 15 分钟 / 登出 / WebView 起唔到)。
 /// 隐藏时 ExcludeFocus 唔抢键盘、TickerMode 停动画;PageView 离屏本身唔画、唔命中点击。
-/// 手机底栏唔保活(同 0.9.83 一样切走即销毁),免得 Android WebView 长驻后台。
+/// [0.9.98 Sam] 手机底栏都保活(之前 0.9.84 只保桌面,手机切走即销毁 ⇒ 切去「我的」再返嚟成页重新加载、
+///   打咗一半嘅字冇咗)。同 Android 官方底栏做法一致(Navigation 2.4+ 默认保存 / 恢复每个 tab 嘅状态);
+///   后台占用有上限:隐藏满 15 分钟照样销毁。
+@visibleForTesting
+bool csKeepPanel({required bool visible, required bool alive}) => visible || alive;
+
 class _CsKeepAliveHost extends ConsumerWidget {
   const _CsKeepAliveHost();
 
@@ -480,8 +490,7 @@ class _CsKeepAliveHost extends ConsumerWidget {
     final visible = ref.watch(contentOverlayProvider) == ContentOverlay.none &&
         ref.watch(currentPageLabelProvider) == PageLabel.support;
     final alive = ref.watch(csAliveProvider);
-    final isMobile = ref.watch(isMobileViewProvider);
-    final keep = visible || (alive && !isMobile);
+    final keep = csKeepPanel(visible: visible, alive: alive);
     return ExcludeFocus(
       excluding: !visible,
       child: TickerMode(

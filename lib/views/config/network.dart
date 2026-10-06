@@ -1,6 +1,6 @@
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/enum/enum.dart';
-import 'package:fl_clash/providers/config.dart';
+import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/widgets/widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -42,13 +42,12 @@ class TUNItem extends ConsumerWidget {
 
     return ListItem.switchItem(
       title: Text(currentAppLocalizations.vgTunDeviceWide(appLocalizations.tun)),
-      subtitle: Text(currentAppLocalizations.vgTunDeviceWideDesc),
+      // [0.9.98] 同快捷设置共用文案同写入口(唔准两个都关)。
+      subtitle: Text(currentAppLocalizations.vgConnModeEnhancedDesc),
       delegate: SwitchDelegate(
         value: enable,
         onChanged: (value) async {
-          ref
-              .read(patchClashConfigProvider.notifier)
-              .update((state) => state.copyWith.tun(enable: value));
+          ref.read(setupActionProvider.notifier).setEnhancedByUser(value);
         },
       ),
     );
@@ -115,13 +114,12 @@ class SystemProxyItem extends ConsumerWidget {
 
     return ListItem.switchItem(
       title: Text(currentAppLocalizations.vgSystemProxyCompat(appLocalizations.systemProxy)),
-      subtitle: Text(currentAppLocalizations.vgSystemProxyCompatDesc),
+      // [0.9.98] 同快捷设置共用文案同写入口(唔准两个都关 + 记低用户亲手开,TUN 接管后唔再自动关)。
+      subtitle: Text(currentAppLocalizations.vgConnModeCompatDesc),
       delegate: SwitchDelegate(
         value: systemProxy,
         onChanged: (bool value) async {
-          ref
-              .read(networkSettingProvider.notifier)
-              .update((state) => state.copyWith(systemProxy: value));
+          ref.read(setupActionProvider.notifier).setSystemProxyByUser(value);
         },
       ),
     );

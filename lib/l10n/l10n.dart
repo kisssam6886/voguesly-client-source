@@ -4529,30 +4529,30 @@ class AppLocalizations {
     );
   }
 
-  /// `{p0}; traffic is still carried by System Proxy (compatibility mode).`
+  /// `{p0}; traffic is still carried by System proxy.`
   String vgKeptSystemProxyCarrying(Object p0) {
     return Intl.message(
-      '$p0; traffic is still carried by System Proxy (compatibility mode).',
+      '$p0; traffic is still carried by System proxy.',
       name: 'vgKeptSystemProxyCarrying',
       desc: '',
       args: [p0],
     );
   }
 
-  /// `{p0}; System Proxy (compatibility mode) has been enabled temporarily to keep you online.`
+  /// `{p0}; System proxy has been turned on temporarily to keep you online.`
   String vgTempEnabledSystemProxy(Object p0) {
     return Intl.message(
-      '$p0; System Proxy (compatibility mode) has been enabled temporarily to keep you online.',
+      '$p0; System proxy has been turned on temporarily to keep you online.',
       name: 'vgTempEnabledSystemProxy',
       desc: '',
       args: [p0],
     );
   }
 
-  /// `Note: compatibility mode only covers apps that honour the system proxy; Telegram and similar apps may still not connect;`
+  /// `Note: with only System proxy on, just apps that honour the system proxy go through Voguesly; Telegram and similar apps may still not connect;`
   String get vgCompatModeOnlyProxyAware {
     return Intl.message(
-      'Note: compatibility mode only covers apps that honour the system proxy; Telegram and similar apps may still not connect;',
+      'Note: with only System proxy on, just apps that honour the system proxy go through Voguesly; Telegram and similar apps may still not connect;',
       name: 'vgCompatModeOnlyProxyAware',
       desc: '',
       args: [],
@@ -4569,10 +4569,10 @@ class AppLocalizations {
     );
   }
 
-  /// `System Proxy (compatibility mode) has been taken over by another proxy app, so Voguesly's compatibility mode is not active.`
+  /// `System proxy has been taken over by another proxy app, so Voguesly's system proxy is not active.`
   String get vgCompatModeTakenOver {
     return Intl.message(
-      'System Proxy (compatibility mode) has been taken over by another proxy app, so Voguesly\'s compatibility mode is not active.',
+      'System proxy has been taken over by another proxy app, so Voguesly\'s system proxy is not active.',
       name: 'vgCompatModeTakenOver',
       desc: '',
       args: [],
@@ -4999,6 +4999,36 @@ class AppLocalizations {
     );
   }
 
+  /// `Open-source licenses & source code`
+  String get vgOpenSource {
+    return Intl.message(
+      'Open-source licenses & source code',
+      name: 'vgOpenSource',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Voguesly is based on FlClash and the mihomo core (GPL-3.0). Tap to view the source code.`
+  String get vgOpenSourceDesc {
+    return Intl.message(
+      'Voguesly is based on FlClash and the mihomo core (GPL-3.0). Tap to view the source code.',
+      name: 'vgOpenSourceDesc',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Third-party licenses`
+  String get vgThirdPartyLicenses {
+    return Intl.message(
+      'Third-party licenses',
+      name: 'vgThirdPartyLicenses',
+      desc: '',
+      args: [],
+    );
+  }
+
   /// `Connection timed out. Check your network and try again.`
   String get vgNetErrTimeout {
     return Intl.message(
@@ -5179,10 +5209,10 @@ class AppLocalizations {
     );
   }
 
-  /// `Compatibility mode`
+  /// `System proxy`
   String get vgConnModeCompat {
     return Intl.message(
-      'Compatibility mode',
+      'System proxy',
       name: 'vgConnModeCompat',
       desc: '',
       args: [],
@@ -6354,10 +6384,10 @@ class AppLocalizations {
     );
   }
 
-  /// `Only apps that follow the system proxy setting (such as browsers) go through Voguesly. No computer password needed; some apps may bypass it.`
+  /// `Apps that follow the system proxy setting (such as browsers) go through Voguesly. No computer password needed. Can be on together with Enhanced mode; with only this on, some apps may bypass it.`
   String get vgConnModeCompatDesc {
     return Intl.message(
-      'Only apps that follow the system proxy setting (such as browsers) go through Voguesly. No computer password needed; some apps may bypass it.',
+      'Apps that follow the system proxy setting (such as browsers) go through Voguesly. No computer password needed. Can be on together with Enhanced mode; with only this on, some apps may bypass it.',
       name: 'vgConnModeCompatDesc',
       desc: '',
       args: [],
@@ -6829,10 +6859,10 @@ class AppLocalizations {
     );
   }
 
-  /// `Virtual NIC is off; you are currently on System Proxy compatibility mode.`
+  /// `Enhanced mode is off; you are currently using System proxy only.`
   String get vgTunOffUsingCompatMode {
     return Intl.message(
-      'Virtual NIC is off; you are currently on System Proxy compatibility mode.',
+      'Enhanced mode is off; you are currently using System proxy only.',
       name: 'vgTunOffUsingCompatMode',
       desc: '',
       args: [],
@@ -9294,10 +9324,10 @@ class AppLocalizations {
     );
   }
 
-  /// `{p0} (device-wide)`
+  /// `Enhanced mode ({p0})`
   String vgTunDeviceWide(Object p0) {
     return Intl.message(
-      '$p0 (device-wide)',
+      'Enhanced mode ($p0)',
       name: 'vgTunDeviceWide',
       desc: '',
       args: [p0],
@@ -9314,10 +9344,10 @@ class AppLocalizations {
     );
   }
 
-  /// `{p0} (compatibility)`
+  /// `{p0}`
   String vgSystemProxyCompat(Object p0) {
     return Intl.message(
-      '$p0 (compatibility)',
+      '$p0',
       name: 'vgSystemProxyCompat',
       desc: '',
       args: [p0],
@@ -9524,10 +9554,10 @@ class AppLocalizations {
     );
   }
 
-  /// `Global mode is on: Chinese domestic sites also detour through overseas routes, which is slower and billed at the route multiplier.`
+  /// `Global mode is on: Chinese domestic sites also detour through overseas routes, which is slower.`
   String get vgGlobalBanner {
     return Intl.message(
-      'Global mode is on: Chinese domestic sites also detour through overseas routes, which is slower and billed at the route multiplier.',
+      'Global mode is on: Chinese domestic sites also detour through overseas routes, which is slower.',
       name: 'vgGlobalBanner',
       desc: '',
       args: [],
@@ -9889,6 +9919,206 @@ class AppLocalizations {
     return Intl.message(
       'The server responded too slowly, so this may already have been submitted. Please check "My tickets" first and only resubmit if it isn\'t there.',
       name: 'vgSubmitMaybeSent',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Replace your current plan?`
+  String get vgReplaceConfirmTitle {
+    return Intl.message(
+      'Replace your current plan?',
+      name: 'vgReplaceConfirmTitle',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Buy anyway`
+  String get vgReplaceConfirmAction {
+    return Intl.message(
+      'Buy anyway',
+      name: 'vgReplaceConfirmAction',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `You have an unpaid order`
+  String get vgPendingOrderTitle {
+    return Intl.message(
+      'You have an unpaid order',
+      name: 'vgPendingOrderTitle',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `"{p0}" ({p1}) hasn't been paid yet. You can pay it now, or cancel it and place a new order.`
+  String vgPendingOrderBody(Object p0, Object p1) {
+    return Intl.message(
+      '"$p0" ($p1) hasn\'t been paid yet. You can pay it now, or cancel it and place a new order.',
+      name: 'vgPendingOrderBody',
+      desc: '',
+      args: [p0, p1],
+    );
+  }
+
+  /// `Pay this order`
+  String get vgPendingContinuePay {
+    return Intl.message(
+      'Pay this order',
+      name: 'vgPendingContinuePay',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Cancel it and order again`
+  String get vgPendingCancelAndNew {
+    return Intl.message(
+      'Cancel it and order again',
+      name: 'vgPendingCancelAndNew',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `An order is being activated. Please try again in a minute.`
+  String get vgOrderActivatingWait {
+    return Intl.message(
+      'An order is being activated. Please try again in a minute.',
+      name: 'vgOrderActivatingWait',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Couldn't cancel the old order. Please cancel it in "My orders" and try again.`
+  String get vgCancelOldOrderFailed {
+    return Intl.message(
+      'Couldn\'t cancel the old order. Please cancel it in "My orders" and try again.',
+      name: 'vgCancelOldOrderFailed',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Your trial has run out. Upgrade to a full plan to keep going.`
+  String get vgTrialEndedBanner {
+    return Intl.message(
+      'Your trial has run out. Upgrade to a full plan to keep going.',
+      name: 'vgTrialEndedBanner',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Your trial has expired. Upgrade to a full plan to keep going.`
+  String get vgTrialExpiredBanner {
+    return Intl.message(
+      'Your trial has expired. Upgrade to a full plan to keep going.',
+      name: 'vgTrialExpiredBanner',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Your trial is almost used up ({p0} left). Upgrade now to avoid interruption.`
+  String vgTrialLowBanner(Object p0) {
+    return Intl.message(
+      'Your trial is almost used up ($p0 left). Upgrade now to avoid interruption.',
+      name: 'vgTrialLowBanner',
+      desc: '',
+      args: [p0],
+    );
+  }
+
+  /// `Upgrade`
+  String get vgUpgradePlan {
+    return Intl.message('Upgrade', name: 'vgUpgradePlan', desc: '', args: []);
+  }
+
+  /// `Connect first`
+  String get vgUnlockAfterConnect {
+    return Intl.message(
+      'Connect first',
+      name: 'vgUnlockAfterConnect',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `"{p0}" VPN is also on. Your traffic may be going through it instead of Voguesly. Open {p0} and turn its VPN switch off (quitting the app is not enough).`
+  String vgOtherVpnWhileConnected(Object p0) {
+    return Intl.message(
+      '"$p0" VPN is also on. Your traffic may be going through it instead of Voguesly. Open $p0 and turn its VPN switch off (quitting the app is not enough).',
+      name: 'vgOtherVpnWhileConnected',
+      desc: '',
+      args: [p0],
+    );
+  }
+
+  /// `Enhanced mode (recommended)`
+  String get vgConnModeEnhancedRec {
+    return Intl.message(
+      'Enhanced mode (recommended)',
+      name: 'vgConnModeEnhancedRec',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Enhanced + System proxy`
+  String get vgConnModeBoth {
+    return Intl.message(
+      'Enhanced + System proxy',
+      name: 'vgConnModeBoth',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Keep at least one on, otherwise apps on this computer can't get online.`
+  String get vgConnModeNeedOne {
+    return Intl.message(
+      'Keep at least one on, otherwise apps on this computer can\'t get online.',
+      name: 'vgConnModeNeedOne',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Enhanced mode couldn't take over this time, so System proxy is keeping you online. Turn the switch on to retry.`
+  String get vgConnModeFellBack {
+    return Intl.message(
+      'Enhanced mode couldn\'t take over this time, so System proxy is keeping you online. Turn the switch on to retry.',
+      name: 'vgConnModeFellBack',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Enhanced mode isn't available on Linux yet; please use System proxy.`
+  String get vgConnModeLinuxNoTun {
+    return Intl.message(
+      'Enhanced mode isn\'t available on Linux yet; please use System proxy.',
+      name: 'vgConnModeLinuxNoTun',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `N/A`
+  String get vgNotApplicable {
+    return Intl.message('N/A', name: 'vgNotApplicable', desc: '', args: []);
+  }
+
+  /// `Bilibili goes direct (mainland)`
+  String get vgBiliHkNaNote {
+    return Intl.message(
+      'Bilibili goes direct (mainland)',
+      name: 'vgBiliHkNaNote',
       desc: '',
       args: [],
     );

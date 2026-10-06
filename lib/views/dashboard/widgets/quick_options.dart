@@ -1,5 +1,5 @@
 import 'package:fl_clash/common/common.dart';
-import 'package:fl_clash/providers/config.dart';
+import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/views/config/network.dart';
 import 'package:fl_clash/widgets/widgets.dart';
 import 'package:flutter/material.dart';
@@ -70,9 +70,7 @@ class TUNButton extends StatelessWidget {
                   return Switch(
                     value: enable,
                     onChanged: (value) {
-                      ref
-                          .read(patchClashConfigProvider.notifier)
-                          .update((state) => state.copyWith.tun(enable: value));
+                      ref.read(setupActionProvider.notifier).setEnhancedByUser(value);
                     },
                   );
                 },
@@ -141,11 +139,7 @@ class SystemProxyButton extends StatelessWidget {
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     value: systemProxy,
                     onChanged: (value) {
-                      ref
-                          .read(networkSettingProvider.notifier)
-                          .update(
-                            (state) => state.copyWith(systemProxy: value),
-                          );
+                      ref.read(setupActionProvider.notifier).setSystemProxyByUser(value);
                     },
                   );
                 },
